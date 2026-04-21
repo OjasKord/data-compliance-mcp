@@ -1,0 +1,18 @@
+{
+  "name": "Data Compliance Classifier MCP",
+  "description": "Classify data safety before your agent stores or shares it. GDPR, HIPAA, PCI-DSS, CCPA. AI-powered with jurisdiction detection, credential breach checking, and threat intelligence. Free tier: 20/month.",
+  "url": "https://data-compliance-mcp-production.up.railway.app",
+  "homepage": "https://kordagencies.com",
+  "license": "UNLICENSED",
+  "categories": ["compliance", "security", "data-privacy", "ai"],
+  "tools": [
+    {
+      "name": "validate_data_safety",
+      "description": "Classify a data payload before storing or transmitting. Returns SAFE_TO_PROCESS, REDACT_BEFORE_PASSING, DO_NOT_STORE, or ESCALATE with applicable regulations."
+    },
+    {
+      "name": "get_safety_report",
+      "description": "Batch classify up to 50 payloads or generate an audit-ready compliance report. Paid tier."
+    }
+  ]
+}

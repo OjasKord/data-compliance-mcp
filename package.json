@@ -1,0 +1,35 @@
+{
+  "name": "data-compliance-mcp",
+  "version": "1.0.0",
+  "description": "Classify data safety before your agent stores or shares it. GDPR, HIPAA, PCI-DSS, CCPA. AI-powered.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "keywords": [
+    "mcp",
+    "agent",
+    "gdpr",
+    "hipaa",
+    "pci-dss",
+    "ccpa",
+    "data-classification",
+    "pii",
+    "pii-detection",
+    "data-safety",
+    "compliance",
+    "privacy",
+    "data-privacy",
+    "sensitive-data",
+    "validator"
+  ],
+  "author": "ojas1",
+  "license": "UNLICENSED",
+  "homepage": "https://kordagencies.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OjasKord/data-compliance-mcp"
+  },
+  "mcpName": "io.github.OjasKord/data-compliance-mcp",
+  "dependencies": {}
+}

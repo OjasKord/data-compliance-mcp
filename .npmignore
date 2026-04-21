@@ -1,0 +1,6 @@
+.env
+*.log
+*.bak
+fix.js
+patch*.js
+.gitignore
