@@ -17,6 +17,8 @@ const FREE_TIER_LIMIT = 20;
 const FREE_TIER_WARNING = 16;
 const apiKeys = new Map();
 const PLAN_LIMITS = { pro: 5000, enterprise: Infinity };
+const STRIPE_PRO_URL = 'https://buy.stripe.com/8x24gy9Ah3iZ8W04xiebu0c';
+const STRIPE_ENTERPRISE_URL = 'https://buy.stripe.com/cNi7sKeUB8Dj7RW7Juebu0d';
 
 const LEGAL_DISCLAIMER = 'Classification is AI-powered and for informational purposes only. Does not constitute legal advice and does not guarantee regulatory compliance. We do not store or log your data payload — it is analysed in memory and immediately discarded. Jurisdiction detection uses IPinfo (ipinfo.io). Credential checks use the Pwned Passwords k-anonymity API (haveibeenpwned.com) — your credentials are never transmitted in full. Threat checks use AbuseIPDB (abuseipdb.com). Provider maximum liability is limited to subscription fees paid in the preceding 3 months. Full terms: kordagencies.com/terms.html';
 
@@ -403,7 +405,7 @@ async function executeTool(name, args, tier) {
         audit_report: 'Pro plan generates structured audit-ready compliance reports',
         threat_intelligence: 'Pro plan checks IP addresses in payload against AbuseIPDB threat database',
         full_reasoning: 'Pro plan includes full AI reasoning per verdict for compliance documentation',
-        upgrade_url: 'https://kordagencies.com'
+        upgrade_url: STRIPE_PRO_URL
       };
     } else {
       result.reasoning = classification.reasoning;
@@ -439,7 +441,7 @@ async function executeTool(name, args, tier) {
             'Audit-ready compliance report',
             'Redaction targets per flagged payload'
           ],
-          upgrade_url: 'https://kordagencies.com',
+          upgrade_url: STRIPE_PRO_URL,
           checked_at: checkedAt,
           _disclaimer: LEGAL_DISCLAIMER
         };
@@ -448,7 +450,7 @@ async function executeTool(name, args, tier) {
         mode: mode,
         status: 'PREVIEW — paid plan required',
         message: 'Pro plan required for ' + mode + ' reports. Upgrade at kordagencies.com.',
-        upgrade_url: 'https://kordagencies.com',
+        upgrade_url: STRIPE_PRO_URL,
         checked_at: checkedAt,
         _disclaimer: LEGAL_DISCLAIMER
       };
@@ -585,7 +587,7 @@ function checkAccess(req, toolName) {
     return {
       allowed: false,
       reason: 'Free tier limit of ' + FREE_TIER_LIMIT + ' classifications/month reached. You have seen it work — upgrade to Pro ($49/month) at kordagencies.com for 5,000 classifications/month.',
-      upgrade_url: 'https://kordagencies.com',
+      upgrade_url: STRIPE_PRO_URL,
       tier: 'free_limit_reached'
     };
   }
@@ -740,7 +742,7 @@ const server = http.createServer(async (req, res) => {
 
           if (!access.allowed) {
             res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { content: [{ type: 'text', text: JSON.stringify({ error: access.reason, upgrade_url: 'https://kordagencies.com', _disclaimer: LEGAL_DISCLAIMER }) }] } }));
+            res.end(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { content: [{ type: 'text', text: JSON.stringify({ error: access.reason, upgrade_url: STRIPE_PRO_URL, _disclaimer: LEGAL_DISCLAIMER }) }] } }));
             return;
           }
 
