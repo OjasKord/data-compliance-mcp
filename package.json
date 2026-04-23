@@ -1,5 +1,6 @@
 {
   "name": "data-compliance-mcp",
+  "mcpName": "io.github.OjasKord/data-compliance-mcp",
   "version": "1.0.0",
   "description": "Classify data safety before your agent stores or shares it. GDPR, HIPAA, PCI-DSS, CCPA. AI-powered.",
   "main": "src/server.js",
@@ -21,15 +22,24 @@
     "privacy",
     "data-privacy",
     "sensitive-data",
-    "validator"
+    "validator",
+    "data-governance",
+    "ai-safety",
+    "regulation",
+    "eu-ai-act"
   ],
-  "author": "ojas1",
+  "author": "Kord Agencies Pte Ltd <ojas@kordagencies.com>",
   "license": "UNLICENSED",
   "homepage": "https://kordagencies.com",
   "repository": {
     "type": "git",
-    "url": "https://github.com/OjasKord/data-compliance-mcp"
+    "url": "git+https://github.com/OjasKord/data-compliance-mcp.git"
   },
-  "mcpName": "io.github.OjasKord/data-compliance-mcp",
+  "bugs": {
+    "url": "https://github.com/OjasKord/data-compliance-mcp/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {}
 }
