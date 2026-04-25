@@ -3,7 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const VERSION = '1.0.0';
+const VERSION = '1.0.2';
 const PERSIST_FILE = '/tmp/datacompliance_stats.json';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const ABUSEIPDB_API_KEY = process.env.ABUSEIPDB_API_KEY || '';
@@ -291,7 +291,7 @@ async function executeTool(name, args, tier) {
   // ── validate_data_safety ──────────────────────────────────────────────────
   if (name === 'validate_data_safety') {
     const { payload, context, data_origin_ip, jurisdiction } = args;
-    if (!payload) return { error: 'payload is required', _disclaimer: LEGAL_DISCLAIMER };
+    if (!payload) return { error: 'payload is required', agent_action: 'PROVIDE_REQUIRED_FIELD', _disclaimer: LEGAL_DISCLAIMER };
 
     // Step 1: Pattern detection (fast, no API call)
     const patterns = detectPatterns(payload);
@@ -375,7 +375,8 @@ async function executeTool(name, args, tier) {
       classification = JSON.parse(clean);
     } catch(e) {
       return {
-        error: 'AI classification temporarily unavailable — manual review recommended before processing this data.',
+        error: 'AI classification temporarily unavailable -- manual review recommended before processing this data.',
+        agent_action: 'DO_NOT_PROCESS_UNTIL_CLASSIFIED',
         patterns_detected: patterns,
         checked_at: checkedAt,
         _disclaimer: LEGAL_DISCLAIMER
@@ -392,7 +393,8 @@ async function executeTool(name, args, tier) {
       jurisdiction_detected: detectedCountry || jurisdiction || null,
       patterns_detected: patterns,
       credential_check: credentialCheck,
-      analysis_type: 'AI-powered classification — NOT a simple pattern match',
+      analysis_type: 'AI-powered classification -- NOT a simple pattern match',
+      source_url: 'api.anthropic.com + ipinfo.io + api.pwnedpasswords.com',
       checked_at: checkedAt,
       _disclaimer: LEGAL_DISCLAIMER
     };
@@ -418,7 +420,7 @@ async function executeTool(name, args, tier) {
   // ── get_safety_report ─────────────────────────────────────────────────────
   if (name === 'get_safety_report') {
     const { mode, payloads, dataset_description, context } = args;
-    if (!mode) return { error: 'mode is required: BATCH or AUDIT', _disclaimer: LEGAL_DISCLAIMER };
+    if (!mode) return { error: 'mode is required: BATCH or AUDIT', agent_action: 'PROVIDE_REQUIRED_FIELD', _disclaimer: LEGAL_DISCLAIMER };
 
     // Free tier preview — run count analysis without full classification
     if (tier === 'free') {
@@ -459,7 +461,7 @@ async function executeTool(name, args, tier) {
     // ── PAID: BATCH mode ──
     if (mode === 'BATCH') {
       if (!payloads || !Array.isArray(payloads) || payloads.length === 0) {
-        return { error: 'payloads array is required for BATCH mode', _disclaimer: LEGAL_DISCLAIMER };
+        return { error: 'payloads array is required for BATCH mode', agent_action: 'PROVIDE_REQUIRED_FIELD', _disclaimer: LEGAL_DISCLAIMER };
       }
       const batch = payloads.slice(0, 50);
       const results = [];
@@ -536,7 +538,7 @@ async function executeTool(name, args, tier) {
     // ── PAID: AUDIT mode ──
     if (mode === 'AUDIT') {
       if (!dataset_description) {
-        return { error: 'dataset_description is required for AUDIT mode', _disclaimer: LEGAL_DISCLAIMER };
+        return { error: 'dataset_description is required for AUDIT mode', agent_action: 'PROVIDE_REQUIRED_FIELD', _disclaimer: LEGAL_DISCLAIMER };
       }
 
       const prompt = 'You are a data compliance auditor. Generate a structured compliance audit report for the following dataset.\n\n' +
@@ -558,14 +560,14 @@ async function executeTool(name, args, tier) {
           _disclaimer: LEGAL_DISCLAIMER
         };
       } catch(e) {
-        return { error: 'Audit report generation failed. Please retry.', checked_at: checkedAt, _disclaimer: LEGAL_DISCLAIMER };
+        return { error: 'Audit report generation failed. Please retry.', agent_action: 'RETRY_IN_2_MIN', checked_at: checkedAt, _disclaimer: LEGAL_DISCLAIMER };
       }
     }
 
-    return { error: 'Invalid mode. Use BATCH or AUDIT.', _disclaimer: LEGAL_DISCLAIMER };
+    return { error: 'Invalid mode. Use BATCH or AUDIT.', agent_action: 'PROVIDE_REQUIRED_FIELD', _disclaimer: LEGAL_DISCLAIMER };
   }
 
-  return { error: 'Unknown tool: ' + name };
+  return { error: 'Unknown tool: ' + name, agent_action: 'RETRY_IN_2_MIN' };
 }
 
 // ─── ACCESS CONTROL ───────────────────────────────────────────────────────────
@@ -742,7 +744,7 @@ const server = http.createServer(async (req, res) => {
 
           if (!access.allowed) {
             res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { content: [{ type: 'text', text: JSON.stringify({ error: access.reason, upgrade_url: STRIPE_PRO_URL, _disclaimer: LEGAL_DISCLAIMER }) }] } }));
+            res.end(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { content: [{ type: 'text', text: JSON.stringify({ error: access.reason, agent_action: 'Inform user free tier quota is exhausted. Upgrade required at kordagencies.com', upgrade_url: STRIPE_PRO_URL, _disclaimer: LEGAL_DISCLAIMER }) }] } }));
             return;
           }
 
@@ -777,6 +779,47 @@ const server = http.createServer(async (req, res) => {
 
   res.writeHead(404, cors); res.end(JSON.stringify({ error: 'Not found' }));
 });
+
+function setupStdio() {
+  if (process.stdin.isTTY) return;
+  let buf = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', chunk => {
+    buf += chunk;
+    const lines = buf.split('\n');
+    buf = lines.pop();
+    lines.forEach(async line => {
+      if (!line.trim()) return;
+      let req;
+      try { req = JSON.parse(line); } catch(e) { return; }
+      let response;
+      if (req.method === 'initialize') {
+        response = { jsonrpc: '2.0', id: req.id, result: { protocolVersion: '2024-11-05', capabilities: { tools: {}, resources: {}, prompts: {} }, serverInfo: { name: 'data-compliance-mcp', version: VERSION, description: 'Classify data safety before your agent stores or shares it. GDPR, HIPAA, PCI-DSS, CCPA. Free tier: 20/month, no API key needed.' } } };
+      } else if (req.method === 'notifications/initialized') {
+        return;
+      } else if (req.method === 'tools/list') {
+        response = { jsonrpc: '2.0', id: req.id, result: { tools } };
+      } else if (req.method === 'resources/list') {
+        response = { jsonrpc: '2.0', id: req.id, result: { resources: [] } };
+      } else if (req.method === 'prompts/list') {
+        response = { jsonrpc: '2.0', id: req.id, result: { prompts: [] } };
+      } else if (req.method === 'tools/call') {
+        try {
+          const result = await executeTool(req.params.name, req.params.arguments || {}, 'paid');
+          response = { jsonrpc: '2.0', id: req.id, result: { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] } };
+        } catch(e) {
+          response = { jsonrpc: '2.0', id: req.id, error: { code: -32603, message: e.message, agent_action: 'RETRY_IN_2_MIN' } };
+        }
+      } else {
+        response = { jsonrpc: '2.0', id: req.id, error: { code: -32601, message: 'Method not found: ' + req.method } };
+      }
+      process.stdout.write(JSON.stringify(response) + '\n');
+    });
+  });
+  process.stdin.resume();
+}
+
+setupStdio();
 
 server.listen(PORT, () => {
   loadStats();
