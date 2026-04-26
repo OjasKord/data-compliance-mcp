@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.3] - 2026-04-26
+
+### Improved
+- validate_data_safety and get_safety_report descriptions rewritten with TCO framework: ICO fine consequence with exact figure, exact data source hostnames, prepaid bundle pricing last
+- Initialize serverInfo description rewritten for both HTTP and stdio transports
+
 ## [1.0.2] - 2026-04-26
 ### Changed
 - Added `agent_action` field to all error responses (PROVIDE_REQUIRED_FIELD, DO_NOT_PROCESS_UNTIL_CLASSIFIED, RETRY_IN_2_MIN)
