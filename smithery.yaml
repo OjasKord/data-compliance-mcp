@@ -1,3 +1,4 @@
+description: "Classifies data for GDPR, HIPAA, and PCI-DSS compliance before your agent stores or shares it."
 startCommand:
   type: http
   url: https://data-compliance-mcp-production.up.railway.app
@@ -10,3 +11,52 @@ startCommand:
         x-from:
           header: "x-api-key"
     required: []
+systemPrompt: |
+  Data Compliance Classifier MCP is a data safety classification layer for AI agents.
+
+  It uses AI to classify any data before an agent stores, transmits, or processes it -- returning a machine-readable verdict so the agent acts immediately without reasoning its way to a compliance decision.
+
+  TWO LAYERS OF INTELLIGENCE
+
+  Layer 1 - Safety Classification (validate_data_safety)
+  Classifies data as SAFE_TO_PROCESS / REDACT_BEFORE_PASSING / DO_NOT_STORE / ESCALATE. Returns the compliance frameworks triggered (GDPR, HIPAA, PCI-DSS, CCPA) and the specific data categories detected.
+
+  Layer 2 - Full Safety Report (get_safety_report)
+  Detailed compliance report with remediation steps, regulatory references, and agent_action recommendations for each identified risk. Use when the agent needs to explain a compliance decision or produce an audit record.
+
+  WHEN TO USE THIS SERVER
+
+  Use these tools whenever your agent is about to:
+  - Write data to a database, file, or cache
+  - Send data to an external API or third-party service
+  - Include personal or financial data in a prompt or context window
+  - Log or audit trail any user-provided content
+  - Pass data between systems in a multi-agent pipeline
+
+  RECOMMENDED WORKFLOW
+
+  Before your agent stores or transmits any data:
+  1. validate_data_safety(data) - get SAFE_TO_PROCESS / REDACT_BEFORE_PASSING / DO_NOT_STORE / ESCALATE verdict
+  2. get_safety_report(data) - if verdict is not SAFE_TO_PROCESS, get full remediation guidance
+  Only store or transmit data if verdict is SAFE_TO_PROCESS.
+
+  TOOLS
+
+  validate_data_safety (AI-POWERED)
+  - Classifies data against GDPR, HIPAA, PCI-DSS, and CCPA simultaneously
+  - Returns: verdict (SAFE_TO_PROCESS / REDACT_BEFORE_PASSING / DO_NOT_STORE / ESCALATE), frameworks_triggered, data_categories_detected, agent_action
+  - ICO maximum fine for misclassified data: 4% of global turnover or EUR 20M
+  - Free tier: first 20 classifications/month, no API key needed
+
+  get_safety_report (AI-POWERED)
+  - Full compliance report with remediation steps per framework
+  - Returns: risk_summary, regulatory_references, redaction_instructions, escalation_contacts, agent_action
+  - Use when a human review or audit trail is required
+  - Free tier: first 20 calls/month, no API key needed
+
+  LEGAL NOTICE
+  Results are for informational purposes only and do not constitute legal advice. Always verify compliance decisions with a qualified data protection officer. We do not log your query content. Full terms: kordagencies.com/terms.html
+
+  FREE TIER
+  20 calls/month with no API key.
+  Upgrade at kordagencies.com -- Pro $99/month, Enterprise $299/month.
