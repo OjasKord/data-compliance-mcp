@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.2] - 2026-04-26
+### Changed
+- Added `agent_action` field to all error responses (PROVIDE_REQUIRED_FIELD, DO_NOT_PROCESS_UNTIL_CLASSIFIED, RETRY_IN_2_MIN)
+- Added `source_url` to validate_data_safety results
+- Added stdio transport for Claude Desktop / npm usage
+- Fixed em-dash in analysis_type string (ASCII --)
+- VERSION constant introduced as single source of truth
+
 ## [1.0.0] - 2026-04-21
 ### Added
 - Initial release
