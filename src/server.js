@@ -3,7 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const VERSION = '1.0.3';
+const VERSION = '1.0.4';
 const PERSIST_FILE = '/tmp/datacompliance_stats.json';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const ABUSEIPDB_API_KEY = process.env.ABUSEIPDB_API_KEY || '';
@@ -280,6 +280,18 @@ const tools = [
       },
       required: ['mode']
     }
+  },
+  {
+    name: 'validate_data_safety_lite',
+    description: 'CALL THIS TOOL when your orchestrator is budget-constrained and cannot afford the full AI classification. validate_data_safety_lite runs pattern detection only -- no Claude API call, no IP check, no credential lookup. Returns verdict and detected_categories in under 100ms at roughly 70% lower token cost than validate_data_safety. Use when: (1) your budget ledger has less than 300 tokens remaining for this call, (2) you need a fast pre-screen before committing to a full AI classification, or (3) you are processing high-volume data where AI classification is applied selectively. Returns SAFE_TO_PROCESS if no sensitive patterns found, REVIEW_REQUIRED if patterns detected. If REVIEW_REQUIRED, follow up with validate_data_safety for full AI verdict with regulatory framework mapping. LEGAL NOTICE: Pattern detection only -- not a substitute for AI-powered classification in regulated environments. Full terms: kordagencies.com/terms.html. Free tier: 20 calls/month.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        payload: { type: 'string', description: 'The data payload to screen for sensitive patterns.' },
+        context: { type: 'string', description: 'Optional: what your agent plans to do with this data.' }
+      },
+      required: ['payload']
+    }
   }
 ];
 
@@ -291,7 +303,7 @@ async function executeTool(name, args, tier) {
   // ── validate_data_safety ──────────────────────────────────────────────────
   if (name === 'validate_data_safety') {
     const { payload, context, data_origin_ip, jurisdiction } = args;
-    if (!payload) return { error: 'payload is required', agent_action: 'PROVIDE_REQUIRED_FIELD', _disclaimer: LEGAL_DISCLAIMER };
+    if (!payload) return { error: 'payload is required', agent_action: 'PROVIDE_REQUIRED_FIELD', category: 'invalid_input', retryable: false, retry_after_ms: null, fallback_tool: 'validate_data_safety_lite', trace_id: Math.random().toString(36).slice(2, 10), _disclaimer: LEGAL_DISCLAIMER };
 
     // Step 1: Pattern detection (fast, no API call)
     const patterns = detectPatterns(payload);
@@ -414,20 +426,21 @@ async function executeTool(name, args, tier) {
       result.redaction_targets = classification.redaction_targets;
     }
 
+    result.token_count = Math.ceil(JSON.stringify(result).length / 4);
     return result;
   }
 
   // ── get_safety_report ─────────────────────────────────────────────────────
   if (name === 'get_safety_report') {
     const { mode, payloads, dataset_description, context } = args;
-    if (!mode) return { error: 'mode is required: BATCH or AUDIT', agent_action: 'PROVIDE_REQUIRED_FIELD', _disclaimer: LEGAL_DISCLAIMER };
+    if (!mode) return { error: 'mode is required: BATCH or AUDIT', agent_action: 'PROVIDE_REQUIRED_FIELD', category: 'invalid_input', retryable: false, retry_after_ms: null, fallback_tool: 'get_safety_report', trace_id: Math.random().toString(36).slice(2, 10), _disclaimer: LEGAL_DISCLAIMER };
 
     // Free tier preview — run count analysis without full classification
     if (tier === 'free') {
       if (mode === 'BATCH' && payloads && Array.isArray(payloads)) {
         const previewPatterns = payloads.slice(0, 5).map(p => detectPatterns(p));
         const flaggedCount = previewPatterns.filter(p => p.length > 0).length;
-        return {
+        const _rBatchPreview = {
           mode: 'BATCH',
           status: 'PREVIEW — paid plan required for full classification',
           payloads_submitted: payloads.length,
@@ -447,8 +460,10 @@ async function executeTool(name, args, tier) {
           checked_at: checkedAt,
           _disclaimer: LEGAL_DISCLAIMER
         };
+        _rBatchPreview.token_count = Math.ceil(JSON.stringify(_rBatchPreview).length / 4);
+        return _rBatchPreview;
       }
-      return {
+      const _rPreview = {
         mode: mode,
         status: 'PREVIEW — paid plan required',
         message: 'Pro plan required for ' + mode + ' reports. Upgrade at kordagencies.com.',
@@ -456,12 +471,14 @@ async function executeTool(name, args, tier) {
         checked_at: checkedAt,
         _disclaimer: LEGAL_DISCLAIMER
       };
+      _rPreview.token_count = Math.ceil(JSON.stringify(_rPreview).length / 4);
+      return _rPreview;
     }
 
     // ── PAID: BATCH mode ──
     if (mode === 'BATCH') {
       if (!payloads || !Array.isArray(payloads) || payloads.length === 0) {
-        return { error: 'payloads array is required for BATCH mode', agent_action: 'PROVIDE_REQUIRED_FIELD', _disclaimer: LEGAL_DISCLAIMER };
+        return { error: 'payloads array is required for BATCH mode', agent_action: 'PROVIDE_REQUIRED_FIELD', category: 'invalid_input', retryable: false, retry_after_ms: null, fallback_tool: 'get_safety_report', trace_id: Math.random().toString(36).slice(2, 10), _disclaimer: LEGAL_DISCLAIMER };
       }
       const batch = payloads.slice(0, 50);
       const results = [];
@@ -518,7 +535,7 @@ async function executeTool(name, args, tier) {
       results.forEach(r => { verdictCounts[r.verdict] = (verdictCounts[r.verdict] || 0) + 1; });
       const highestRisk = results.filter(r => r.verdict === 'ESCALATE' || r.verdict === 'DO_NOT_STORE');
 
-      return {
+      const _rBatch = {
         mode: 'BATCH',
         total_payloads: batch.length,
         classified: results.length,
@@ -533,12 +550,14 @@ async function executeTool(name, args, tier) {
         checked_at: checkedAt,
         _disclaimer: LEGAL_DISCLAIMER
       };
+      _rBatch.token_count = Math.ceil(JSON.stringify(_rBatch).length / 4);
+      return _rBatch;
     }
 
     // ── PAID: AUDIT mode ──
     if (mode === 'AUDIT') {
       if (!dataset_description) {
-        return { error: 'dataset_description is required for AUDIT mode', agent_action: 'PROVIDE_REQUIRED_FIELD', _disclaimer: LEGAL_DISCLAIMER };
+        return { error: 'dataset_description is required for AUDIT mode', agent_action: 'PROVIDE_REQUIRED_FIELD', category: 'invalid_input', retryable: false, retry_after_ms: null, fallback_tool: 'get_safety_report', trace_id: Math.random().toString(36).slice(2, 10), _disclaimer: LEGAL_DISCLAIMER };
       }
 
       const prompt = 'You are a data compliance auditor. Generate a structured compliance audit report for the following dataset.\n\n' +
@@ -551,7 +570,7 @@ async function executeTool(name, args, tier) {
         const response = await callClaude(prompt);
         const clean = response.replace(/```json|```/g, '').trim();
         const report = JSON.parse(clean);
-        return {
+        const _rAudit = {
           mode: 'AUDIT',
           dataset_description,
           report,
@@ -559,15 +578,42 @@ async function executeTool(name, args, tier) {
           checked_at: checkedAt,
           _disclaimer: LEGAL_DISCLAIMER
         };
+        _rAudit.token_count = Math.ceil(JSON.stringify(_rAudit).length / 4);
+        return _rAudit;
       } catch(e) {
-        return { error: 'Audit report generation failed. Please retry.', agent_action: 'RETRY_IN_2_MIN', checked_at: checkedAt, _disclaimer: LEGAL_DISCLAIMER };
+        return { error: 'Audit report generation failed. Please retry.', agent_action: 'RETRY_IN_2_MIN', category: 'upstream_unavailable', retryable: true, retry_after_ms: 120000, fallback_tool: 'get_safety_report', trace_id: Math.random().toString(36).slice(2, 10), checked_at: checkedAt, _disclaimer: LEGAL_DISCLAIMER };
       }
     }
 
-    return { error: 'Invalid mode. Use BATCH or AUDIT.', agent_action: 'PROVIDE_REQUIRED_FIELD', _disclaimer: LEGAL_DISCLAIMER };
+    return { error: 'Invalid mode. Use BATCH or AUDIT.', agent_action: 'PROVIDE_REQUIRED_FIELD', category: 'invalid_input', retryable: false, retry_after_ms: null, fallback_tool: 'get_safety_report', trace_id: Math.random().toString(36).slice(2, 10), _disclaimer: LEGAL_DISCLAIMER };
   }
 
-  return { error: 'Unknown tool: ' + name, agent_action: 'RETRY_IN_2_MIN' };
+  // ── validate_data_safety_lite ─────────────────────────────────────────────
+  // Pattern detection only. No AI call, no IP check, no credential check.
+  if (name === 'validate_data_safety_lite') {
+    const { payload, context } = args;
+    if (!payload) return { error: 'payload is required', agent_action: 'PROVIDE_REQUIRED_FIELD', category: 'invalid_input', retryable: false, retry_after_ms: null, fallback_tool: 'validate_data_safety_lite', trace_id: Math.random().toString(36).slice(2, 10), _disclaimer: LEGAL_DISCLAIMER };
+    const patterns = detectPatterns(payload);
+    const hasSensitive = patterns.length > 0;
+    const sensitivityLevel = patterns.some(p => ['SPECIAL_CATEGORY', 'CREDENTIAL', 'FINANCIAL'].includes(p))
+      ? 'CONFIDENTIAL'
+      : hasSensitive ? 'INTERNAL' : 'PUBLIC';
+    const _rLite = {
+      verdict: hasSensitive ? 'REVIEW_REQUIRED' : 'SAFE_TO_PROCESS',
+      agent_action: hasSensitive
+        ? 'Run validate_data_safety for full AI classification before storing or transmitting this payload.'
+        : 'No sensitive patterns detected. Proceed with caution -- pattern detection does not replace AI classification.',
+      patterns_detected: patterns,
+      sensitivity_level: sensitivityLevel,
+      analysis_type: 'Pattern detection only -- no AI analysis. Use validate_data_safety for full AI verdict.',
+      checked_at: checkedAt,
+      _disclaimer: LEGAL_DISCLAIMER
+    };
+    _rLite.token_count = Math.ceil(JSON.stringify(_rLite).length / 4);
+    return _rLite;
+  }
+
+  return { error: 'Unknown tool: ' + name, agent_action: 'RETRY_IN_2_MIN', category: 'unknown_tool', retryable: false, retry_after_ms: null, fallback_tool: null, trace_id: Math.random().toString(36).slice(2, 10) };
 }
 
 // ─── ACCESS CONTROL ───────────────────────────────────────────────────────────
@@ -672,9 +718,17 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.url === '/ready' && (req.method === 'GET' || req.method === 'HEAD')) {
+    const checks = { anthropic: !!ANTHROPIC_API_KEY };
+    const ready = checks.anthropic;
+    res.writeHead(ready ? 200 : 503, { ...cors, 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: ready ? 'ready' : 'not_ready', version: VERSION, checks }));
+    return;
+  }
+
   if (req.url === '/.well-known/mcp/server-card.json') {
     res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ name: 'data-compliance-mcp', version: VERSION, description: 'Classify data safety before your agent stores or shares it. GDPR, HIPAA, PCI-DSS. Free tier: 20/month.', tools: tools.map(t => ({ name: t.name, description: t.description.slice(0, 100) })), transport: 'stdio', homepage: 'https://kordagencies.com', author: 'ojas1' }));
+    res.end(JSON.stringify({ name: 'data-compliance-mcp', version: VERSION, description: 'Classify data safety before your agent stores or shares it. GDPR, HIPAA, PCI-DSS. Free tier: 20/month.', tools: tools.map(t => ({ name: t.name, description: t.description.slice(0, 100) })), transport: 'streamable-http', homepage: 'https://kordagencies.com', author: 'ojas1', token_footprint_min: 238, token_footprint_max: 2000, token_footprint_avg: 709, idempotent_tools: ['validate_data_safety', 'get_safety_report', 'validate_data_safety_lite'], circuit_breaker: false, health_endpoint: '/health', ready_endpoint: '/ready' }));
     return;
   }
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.4] - 2026-04-27
+
+### Added
+- `token_count` field on all tool responses — lets orchestrator budget ledgers track token cost per call
+- `/ready` endpoint — returns 200 when `ANTHROPIC_API_KEY` is present, 503 otherwise
+- Phase 4 enhanced error objects: `category`, `retryable`, `retry_after_ms`, `fallback_tool`, `trace_id` on all 7 error paths
+- `validate_data_safety_lite` tool — pattern-detection only with no AI call, for budget-constrained orchestrators
+
 ## [1.0.3] - 2026-04-26
 
 ### Improved
