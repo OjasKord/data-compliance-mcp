@@ -3,7 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const VERSION = '1.0.4';
+const VERSION = '1.0.5';
 const PERSIST_FILE = '/tmp/datacompliance_stats.json';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const ABUSEIPDB_API_KEY = process.env.ABUSEIPDB_API_KEY || '';
@@ -17,7 +17,8 @@ const FREE_TIER_LIMIT = 20;
 const FREE_TIER_WARNING = 16;
 const apiKeys = new Map();
 const PLAN_LIMITS = { pro: 5000, enterprise: Infinity };
-const STRIPE_PRO_URL = 'https://buy.stripe.com/8x24gy9Ah3iZ8W04xiebu0c';
+const STRIPE_PRO_URL = 'https://buy.stripe.com/cNidR87s9dXD0pue7Sebu0r';
+const ENTERPRISE_UPGRADE_URL = 'https://buy.stripe.com/9B6bJ0aElbPv7RW9RCebu0s';
 const STRIPE_ENTERPRISE_URL = 'https://buy.stripe.com/cNi7sKeUB8Dj7RW7Juebu0d';
 
 const LEGAL_DISCLAIMER = 'Classification is AI-powered and for informational purposes only. Does not constitute legal advice and does not guarantee regulatory compliance. We do not store or log your data payload — it is analysed in memory and immediately discarded. Jurisdiction detection uses IPinfo (ipinfo.io). Credential checks use the Pwned Passwords k-anonymity API (haveibeenpwned.com) — your credentials are never transmitted in full. Threat checks use AbuseIPDB (abuseipdb.com). Provider maximum liability is limited to subscription fees paid in the preceding 3 months. Full terms: kordagencies.com/terms.html';
@@ -413,7 +414,7 @@ async function executeTool(name, args, tier) {
 
     // Gate reasoning on free tier
     if (tier === 'free') {
-      result._reasoning_gated = '[Upgrade to Pro for full AI reasoning behind this verdict — required for compliance audit documentation. kordagencies.com]';
+      result._reasoning_gated = '[Get 500 calls for $24 at ' + STRIPE_PRO_URL + ' for full AI reasoning behind this verdict -- required for compliance audit documentation]';
       result._upgrade = {
         batch_classification: 'Pro plan classifies up to 50 payloads per call — bulk data workflows',
         audit_report: 'Pro plan generates structured audit-ready compliance reports',
@@ -466,7 +467,7 @@ async function executeTool(name, args, tier) {
       const _rPreview = {
         mode: mode,
         status: 'PREVIEW — paid plan required',
-        message: 'Pro plan required for ' + mode + ' reports. Upgrade at kordagencies.com.',
+        message: 'Pro plan required for ' + mode + ' reports. Get 500 calls for $24 at ' + STRIPE_PRO_URL + ' -- calls never expire.',
         upgrade_url: STRIPE_PRO_URL,
         checked_at: checkedAt,
         _disclaimer: LEGAL_DISCLAIMER
@@ -634,7 +635,7 @@ function checkAccess(req, toolName) {
   if (calls >= FREE_TIER_LIMIT) {
     return {
       allowed: false,
-      reason: 'Free tier limit of ' + FREE_TIER_LIMIT + ' classifications/month reached. You have seen it work — upgrade to Pro ($49/month) at kordagencies.com for 5,000 classifications/month.',
+      reason: 'Free tier limit reached. Get 500 calls for $24 at ' + STRIPE_PRO_URL + ' -- calls never expire.',
       upgrade_url: STRIPE_PRO_URL,
       tier: 'free_limit_reached'
     };
@@ -644,7 +645,7 @@ function checkAccess(req, toolName) {
   const remaining = FREE_TIER_LIMIT - calls - 1;
   return {
     allowed: true, tier: 'free', remaining,
-    warning: remaining <= 4 ? remaining + ' free classification' + (remaining === 1 ? '' : 's') + ' remaining this month. Upgrade at kordagencies.com.' : null
+    warning: remaining <= 4 ? remaining + ' free classification' + (remaining === 1 ? '' : 's') + ' remaining this month. Get 500 calls for $24 at ' + STRIPE_PRO_URL + ' -- calls never expire.' : null
   };
 }
 
@@ -798,7 +799,7 @@ const server = http.createServer(async (req, res) => {
 
           if (!access.allowed) {
             res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { content: [{ type: 'text', text: JSON.stringify({ error: access.reason, agent_action: 'Inform user free tier quota is exhausted. Upgrade required at kordagencies.com', upgrade_url: STRIPE_PRO_URL, _disclaimer: LEGAL_DISCLAIMER }) }] } }));
+            res.end(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { content: [{ type: 'text', text: JSON.stringify({ error: access.reason, agent_action: 'Inform user free tier quota is exhausted. Get 500 calls for $24 at ' + STRIPE_PRO_URL + ' -- calls never expire.', upgrade_url: STRIPE_PRO_URL, _disclaimer: LEGAL_DISCLAIMER }) }] } }));
             return;
           }
 
@@ -827,7 +828,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET' && req.url === '/') {
     res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ name: 'data-compliance-mcp', version: VERSION, status: 'ok', tools: 2, free_tier: '20 classifications/month, no API key required', description: 'Classify data safety before your agent stores or shares it. GDPR, HIPAA, PCI-DSS, CCPA.', upgrade: 'https://kordagencies.com' }));
+    res.end(JSON.stringify({ name: 'data-compliance-mcp', version: VERSION, status: 'ok', tools: 2, free_tier: '20 classifications/month, no API key required', description: 'Classify data safety before your agent stores or shares it. GDPR, HIPAA, PCI-DSS, CCPA.', upgrade: STRIPE_PRO_URL }));
     return;
   }
 

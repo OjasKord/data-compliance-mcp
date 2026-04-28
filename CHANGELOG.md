@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.5] - 2026-04-28
+
+### Changed
+- Payment links updated to prepaid bundle URLs: 500 calls for $24 -- calls never expire
+- Free tier limit errors now direct agents to prepaid bundle purchase link directly
+
 ## [1.0.4] - 2026-04-27
 
 ### Added
