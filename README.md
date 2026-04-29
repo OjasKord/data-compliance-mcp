@@ -1,3 +1,5 @@
+[![smithery badge](https://smithery.ai/badge/OjasKord/data-compliance-mcp)](https://smithery.ai/servers/OjasKord/data-compliance-mcp)
+
 # Data Compliance Classifier MCP
 
 Your agent is about to store customer data. Is it safe to? This tool tells you in one call.
