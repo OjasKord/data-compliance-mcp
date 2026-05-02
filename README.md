@@ -59,11 +59,11 @@ We do not store or log your data payloads. All payloads are analysed in memory a
 
 ## Pricing
 
-| Plan | Price | Classifications |
+| Plan | Classifications | Price |
 |---|---|---|
-| Free | $0 | 20/month, no API key needed |
-| Pro | $49/month | 5,000/month |
-| Enterprise | $199/month | Unlimited |
+| Free | 20/month | No API key needed |
+| Starter | 500-call bundle | $24 |
+| Pro | 2,000-call bundle | $84 |
 
 Upgrade at [kordagencies.com](https://kordagencies.com)
 
