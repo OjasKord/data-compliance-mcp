@@ -3,7 +3,7 @@
   "name": "io.github.OjasKord/data-compliance-mcp",
   "title": "Data Compliance Classifier MCP",
   "description": "Classify data safety before storing or sharing. GDPR, HIPAA, PCI-DSS, CCPA. AI-powered.",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "websiteUrl": "https://kordagencies.com",
   "repository": {
     "url": "https://github.com/OjasKord/data-compliance-mcp",
@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "identifier": "data-compliance-mcp",
-      "version": "1.0.5",
+      "version": "1.0.6",
       "transport": { "type": "stdio" },
       "environmentVariables": [
         { "name": "ANTHROPIC_API_KEY", "description": "Anthropic API key for AI classification", "isRequired": true, "isSecret": true },

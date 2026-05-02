@@ -54,6 +54,12 @@ systemPrompt: |
   - Use when a human review or audit trail is required
   - Free tier: first 20 calls/month, no API key needed
 
+  validate_data_safety_lite
+  - Pattern detection only -- no Claude API call, no IP check, no credential lookup
+  - Returns SAFE_TO_PROCESS or REVIEW_REQUIRED in under 100ms at ~70% lower token cost
+  - Use when budget-constrained or pre-screening before full AI classification
+  - Free tier: 20 calls/month, no API key needed
+
   LEGAL NOTICE
   Results are for informational purposes only and do not constitute legal advice. Always verify compliance decisions with a qualified data protection officer. We do not log your query content. Full terms: kordagencies.com/terms.html
 
