@@ -92,6 +92,49 @@ With paid API key:
 }
 ```
 
+## Harness Integration
+
+### Claude Code / Claude Desktop (.mcp.json)
+```json
+{
+  "mcpServers": {
+    "data-compliance": {
+      "type": "http",
+      "url": "https://data-compliance-mcp-production.up.railway.app"
+    }
+  }
+}
+```
+
+### LangChain (Python)
+```python
+from langchain_mcp_adapters.client import MultiServerMCPClient
+client = MultiServerMCPClient({
+    "data-compliance": {
+        "url": "https://data-compliance-mcp-production.up.railway.app",
+        "transport": "http"
+    }
+})
+tools = await client.get_tools()
+```
+
+### OpenAI Agents SDK (Python)
+```python
+from agents import Agent, HostedMCPTool
+agent = Agent(
+    name="Assistant",
+    tools=[HostedMCPTool(tool_config={
+        "type": "mcp",
+        "server_label": "data-compliance",
+        "server_url": "https://data-compliance-mcp-production.up.railway.app",
+        "require_approval": "never"
+    })]
+)
+```
+
+### LangGraph
+Same as LangChain above — langchain-mcp-adapters works with LangGraph natively.
+
 ## Example call
 
 ```bash
