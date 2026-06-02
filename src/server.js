@@ -3,7 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const VERSION = '1.0.6';
+const VERSION = '1.0.8';
 const PERSIST_FILE = '/tmp/datacompliance_stats.json';
 const API_KEYS_FILE = '/tmp/datacompliance_apikeys.json';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
@@ -18,6 +18,9 @@ const FREE_TIER_LIMIT = 20;
 const FREE_TIER_WARNING = 16;
 const apiKeys = new Map();
 const PLAN_LIMITS = { pro: 5000, enterprise: Infinity };
+const toolUsageCounts = {};
+const trialExtensions = new Map();
+const TRIAL_EXTENSION_CALLS = 10;
 const STRIPE_PRO_URL = 'https://buy.stripe.com/cNidR87s9dXD0pue7Sebu0r';
 const ENTERPRISE_UPGRADE_URL = 'https://buy.stripe.com/9B6bJ0aElbPv7RW9RCebu0s';
 const STRIPE_ENTERPRISE_URL = 'https://buy.stripe.com/cNi7sKeUB8Dj7RW7Juebu0d';
@@ -31,7 +34,9 @@ function saveStats() {
   try {
     fs.writeFileSync(PERSIST_FILE, JSON.stringify({
       freeTierUsage: Array.from(freeTierUsage.entries()),
-      usageLog: usageLog.slice(-1000)
+      usageLog: usageLog.slice(-1000),
+      toolUsageCounts,
+      trialExtensions: Array.from(trialExtensions.entries())
     }));
   } catch(e) { console.error('Stats save error:', e.message); }
 }
@@ -42,7 +47,9 @@ function loadStats() {
       const data = JSON.parse(fs.readFileSync(PERSIST_FILE, 'utf8'));
       if (data.freeTierUsage) data.freeTierUsage.forEach(([k, v]) => freeTierUsage.set(k, v));
       if (data.usageLog) usageLog.push(...data.usageLog);
-      console.log('Stats loaded: ' + freeTierUsage.size + ' IPs, ' + usageLog.length + ' calls');
+      if (data.toolUsageCounts) Object.assign(toolUsageCounts, data.toolUsageCounts);
+      if (data.trialExtensions) data.trialExtensions.forEach(([k, v]) => trialExtensions.set(k, v));
+      console.log('Stats loaded: ' + freeTierUsage.size + ' IPs, ' + usageLog.length + ' calls, ' + trialExtensions.size + ' trial extensions');
     }
   } catch(e) { console.error('Stats load error:', e.message); }
 }
@@ -707,14 +714,16 @@ function checkAccess(req, toolName) {
     return { allowed: true, tier: record.plan };
   }
 
-  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+  const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+  const ip = rawIp.split(',')[0].trim();
   const monthKey = getMonthKey(ip);
   const calls = freeTierUsage.get(monthKey) || 0;
   if (calls >= FREE_TIER_LIMIT) {
     return {
       allowed: false,
-      reason: 'Free tier limit reached. Get 500 calls for $24 at ' + STRIPE_PRO_URL + ' -- calls never expire.',
+      reason: 'Free tier limit of ' + FREE_TIER_LIMIT + ' calls/month reached. Option 1: POST /trial-extension with {"name":"...","email":"...","use_case":"..."} for 10 extra free calls. Option 2: Upgrade at ' + STRIPE_PRO_URL + ' (500 calls, never expire).',
       upgrade_url: STRIPE_PRO_URL,
+      trial_extension: { endpoint: '/trial-extension', method: 'POST', body: { name: 'string', email: 'string', use_case: 'string' } },
       tier: 'free_limit_reached'
     };
   }
@@ -836,10 +845,34 @@ const server = http.createServer(async (req, res) => {
     if (req.headers['x-stats-key'] !== STATS_KEY) { res.writeHead(401, cors); res.end(JSON.stringify({ error: 'Unauthorized' })); return; }
     const totalFreeCalls = Array.from(freeTierUsage.values()).reduce((a, b) => a + b, 0);
     const freeUniqueIPs = new Set(Array.from(freeTierUsage.keys()).map(k => k.split(':')[0])).size;
-    const toolCounts = {};
-    usageLog.forEach(e => { toolCounts[e.tool] = (toolCounts[e.tool] || 0) + 1; });
     res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ free_tier_unique_ips: freeUniqueIPs, free_tier_total_calls: totalFreeCalls, paid_keys_issued: apiKeys.size, tool_usage: toolCounts, recent_calls: usageLog.slice(-20).reverse() }));
+    res.end(JSON.stringify({ free_tier_unique_ips: freeUniqueIPs, free_tier_total_calls: totalFreeCalls, paid_keys_issued: apiKeys.size, tool_usage: toolUsageCounts, recent_calls: usageLog.slice(-20).reverse(), trial_extensions_granted: trialExtensions.size }));
+    return;
+  }
+
+  if (req.url === '/trial-extension' && req.method === 'POST') {
+    let body = ''; req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { name, email, use_case } = JSON.parse(body);
+        if (!name || !email) { res.writeHead(400, { ...cors, 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'name and email are required', agent_action: 'PROVIDE_REQUIRED_FIELDS' })); return; }
+        const emailKey = 'trial:' + email.toLowerCase().trim();
+        if (trialExtensions.has(emailKey)) { res.writeHead(409, { ...cors, 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Trial extension already granted for this email.', upgrade_url: STRIPE_PRO_URL, agent_action: 'INFORM_USER_TRIAL_ALREADY_USED' })); return; }
+        const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+        const ip = rawIp.split(',')[0].trim();
+        const monthKey = getMonthKey(ip);
+        const currentCalls = freeTierUsage.get(monthKey) || 0;
+        freeTierUsage.set(monthKey, Math.max(0, currentCalls - TRIAL_EXTENSION_CALLS));
+        trialExtensions.set(emailKey, { name, email, use_case: use_case || '', ip, granted_at: nowISO() });
+        saveStats();
+        await sendEmail('ojas@kordagencies.com', 'Data Compliance MCP -- Trial Extension: ' + name,
+          '<p><b>Name:</b> ' + name + '<br><b>Email:</b> ' + email + '<br><b>Use case:</b> ' + (use_case || 'Not provided') + '<br><b>IP:</b> ' + ip + '<br><b>Calls granted:</b> ' + TRIAL_EXTENSION_CALLS + '</p>');
+        await sendEmail(email, TRIAL_EXTENSION_CALLS + ' extra free calls added -- Data Compliance MCP',
+          '<p>Hi ' + name + ',</p><p>Your ' + TRIAL_EXTENSION_CALLS + ' extra free calls have been added. You can keep using Data Compliance MCP right now -- no action needed.</p><p>When you need more, Pro is $24/month for 500 calls (never expire): ' + STRIPE_PRO_URL + '</p><p>Ojas<br>kordagencies.com</p>');
+        res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ granted: true, additional_calls: TRIAL_EXTENSION_CALLS, message: TRIAL_EXTENSION_CALLS + ' extra free calls added. Check your email for confirmation.', upgrade_url: STRIPE_PRO_URL }));
+      } catch(e) { res.writeHead(400, { ...cors, 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message, agent_action: 'RETRY_IN_2_MIN' })); }
+    });
     return;
   }
 
@@ -884,9 +917,11 @@ const server = http.createServer(async (req, res) => {
             return;
           }
 
-          const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+          const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+          const ip = rawIp.split(',')[0].trim();
           usageLog.push({ tool: name, tier: access.tier, time: nowISO(), ip: ip.slice(0, 8) + '...' });
           if (usageLog.length > 1000) usageLog.shift();
+          toolUsageCounts[name] = (toolUsageCounts[name] || 0) + 1;
           saveStats();
 
           const result = await executeTool(name, toolArgs || {}, access.tier);
