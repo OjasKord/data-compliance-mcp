@@ -3,7 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const VERSION = '1.0.9';
+const VERSION = '1.0.10';
 const PERSIST_FILE = '/tmp/datacompliance_stats.json';
 const API_KEYS_FILE = '/tmp/datacompliance_apikeys.json';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
@@ -25,10 +25,22 @@ const STRIPE_PRO_URL = 'https://buy.stripe.com/cNidR87s9dXD0pue7Sebu0r';
 const ENTERPRISE_UPGRADE_URL = 'https://buy.stripe.com/9B6bJ0aElbPv7RW9RCebu0s';
 const STRIPE_ENTERPRISE_URL = 'https://buy.stripe.com/cNi7sKeUB8Dj7RW7Juebu0d';
 
+const REDIS_PREFIX = 'dcc';
+const FREE_TIER_REDIS_KEY = 'dcc:free_tier_usage';
+const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
+const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+
 const LEGAL_DISCLAIMER = 'Classification is AI-powered and for informational purposes only. Does not constitute legal advice and does not guarantee regulatory compliance. We do not store or log your data payload — it is analysed in memory and immediately discarded. Jurisdiction detection uses IPinfo (ipinfo.io). Credential checks use the Pwned Passwords k-anonymity API (haveibeenpwned.com) — your credentials are never transmitted in full. Threat checks use AbuseIPDB (abuseipdb.com). Provider maximum liability is limited to subscription fees paid in the preceding 3 months. Full terms: kordagencies.com/terms.html';
 
 function nowISO() { return new Date().toISOString(); }
 function getMonthKey(ip) { return ip + ':' + new Date().toISOString().slice(0, 7); }
+
+function getEffectiveLimit(ip) {
+  for (const record of trialExtensions.values()) {
+    if (record.ip === ip) return FREE_TIER_LIMIT + TRIAL_EXTENSION_CALLS;
+  }
+  return FREE_TIER_LIMIT;
+}
 
 function saveStats() {
   try {
@@ -72,6 +84,105 @@ function generateApiKey() { return 'dcc_' + crypto.randomBytes(24).toString('hex
 function getPlanFromProduct(name) {
   if (!name) return 'pro';
   return name.toLowerCase().includes('enterprise') ? 'enterprise' : 'pro';
+}
+
+// ─── REDIS HELPERS ────────────────────────────────────────────────────────────
+
+async function redisGet(key) {
+  try {
+    const res = await fetch(
+      `${UPSTASH_URL}/get/${encodeURIComponent(key)}`,
+      { headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` } }
+    );
+    const data = await res.json();
+    if (data.error) console.error('[Redis] redisGet error:', data.error, 'key:', key);
+    if (!data.result) return null;
+    return JSON.parse(data.result);
+  } catch(e) { return null; }
+}
+
+async function redisSet(key, value) {
+  try {
+    const res = await fetch(`${process.env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(JSON.stringify(value))}`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}` }
+    });
+    const data = await res.json();
+    if (data.error) console.error('[Redis] redisSet error:', data.error, 'key:', key);
+  } catch(e) { console.error('[Redis] redisSet failed:', e); }
+}
+
+async function redisExpire(key, seconds) {
+  try {
+    const res = await fetch(
+      `${UPSTASH_URL}/expire/${encodeURIComponent(key)}/${seconds}`,
+      { method: 'POST', headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` } }
+    );
+    const data = await res.json();
+    if (data.error) console.error('[Redis] redisExpire error:', data.error, 'key:', key);
+  } catch(e) { console.error('[Redis] redisExpire failed:', e); }
+}
+
+async function redisKeys(pattern) {
+  try {
+    const res = await fetch(
+      `${UPSTASH_URL}/keys/${encodeURIComponent(pattern)}`,
+      { headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` } }
+    );
+    const data = await res.json();
+    if (data.error) console.error('[Redis] redisKeys error:', data.error, 'pattern:', pattern);
+    return data.result || [];
+  } catch(e) { return []; }
+}
+
+async function appendSessionLog(ip, tool) {
+  try {
+    const ipSafe = ip.replace(/:/g, '_').replace(/\s/g, '');
+    const dayKey = new Date().toISOString().slice(0, 10);
+    const key = `${REDIS_PREFIX}:session:${ipSafe}:${dayKey}`;
+    const existing = await redisGet(key) || [];
+    existing.push({ tool, timestamp: new Date().toISOString() });
+    await redisSet(key, existing);
+    await redisExpire(key, 86400);
+  } catch(e) { console.error('[SessionLog] internal error:', e); }
+}
+
+async function saveKeyToRedis(apiKey, record) {
+  await redisSet(`${REDIS_PREFIX}:key:${apiKey}`, record);
+}
+
+async function loadApiKeysFromRedis() {
+  const keys = await redisKeys(`${REDIS_PREFIX}:key:*`);
+  for (const redisKey of keys) {
+    const record = await redisGet(redisKey);
+    if (record) {
+      const apiKey = redisKey.replace(`${REDIS_PREFIX}:key:`, '');
+      apiKeys.set(apiKey, record);
+    }
+  }
+  console.log(`Loaded ${apiKeys.size} API keys from Redis`);
+}
+
+async function loadFreeTierFromRedis() {
+  try {
+    const data = await redisGet(FREE_TIER_REDIS_KEY);
+    if (data && Array.isArray(data)) {
+      data.forEach(([k, v]) => freeTierUsage.set(k, v));
+      console.log('[FreeTier] Loaded ' + freeTierUsage.size + ' IPs from Redis');
+    }
+  } catch(e) { console.error('[FreeTier] load failed:', e); }
+}
+
+async function saveFreeTierToRedis() {
+  try {
+    const existing = await redisGet(FREE_TIER_REDIS_KEY) || [];
+    const existingMap = new Map(existing);
+    for (const [key, value] of freeTierUsage.entries()) {
+      const existingCount = existingMap.get(key) || 0;
+      existingMap.set(key, Math.max(existingCount, value));
+    }
+    await redisSet(FREE_TIER_REDIS_KEY, Array.from(existingMap.entries()));
+  } catch(e) { console.error('[FreeTier] save failed:', e); }
 }
 
 // ─── EXTERNAL APIs ────────────────────────────────────────────────────────────
@@ -280,7 +391,7 @@ const tools = [
   {
     name: 'validate_data_safety',
     idempotent: true,
-    description: 'Call this tool BEFORE your agent passes any user-provided content to an external API, LLM call, or third-party service. An agent that forwards unredacted user input to an external endpoint without classification is a data exfiltration vector -- a single GDPR Article 9 breach or HIPAA PHI disclosure carries regulatory fines with no recovery path once the data has left. This tool operates at the infrastructure layer -- before the LLM reasoning loop -- classifying content against 10 frameworks including GDPR, HIPAA, PCI-DSS, and CCPA. Returns SAFE_TO_PROCESS, REDACT_BEFORE_PASSING, DO_NOT_STORE, or ESCALATE verdict and agent_action field. One call replaces a full compliance review cycle. We do not log your query content. Free tier: 20 calls/month, no API key required.',
+    description: 'Call this at the moment your agent has received user-provided content and has not yet passed it to any external API, LLM call, database write, or logging system. Returns SAFE_TO_PROCESS, REDACT_BEFORE_PASSING, DO_NOT_STORE, or ESCALATE verdict with agent_action field — sourced from AI classification against GDPR, HIPAA, PCI-DSS, CCPA, and 6 other frameworks, plus jurisdiction detection via IPinfo and credential breach check via HaveIBeenPwned. An ESCALATE verdict means stop processing immediately and surface to human review. A REDACT_BEFORE_PASSING verdict means run get_safety_report next to obtain the compliant reformulation before proceeding. Forwarding unclassified user input to an external endpoint is a data exfiltration vector — a single GDPR Article 9 breach or HIPAA PHI disclosure carries regulatory fines with no recovery path once the data has left your system. Do not use as a post-hoc audit tool — call before every external transmission. We do not log your query content. Free tier: 20 calls/month, no API key required.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -295,7 +406,7 @@ const tools = [
   {
     name: 'get_safety_report',
     idempotent: true,
-    description: 'Call this tool IMMEDIATELY AFTER validate_data_safety returns REDACT_BEFORE_PASSING, DO_NOT_STORE, or ESCALATE -- before your agent decides whether to proceed, redact, or halt. REPORT mode: takes the flagged payload and returns the specific regulation triggered, the exact data fields that are problematic, a recommended redaction strategy, and a compliance-safe reformulation of the payload your agent can use instead -- machine-readable, no further analysis needed. Produces an auditable compliance trail for regulated industries. BATCH mode: classify up to 50 payloads simultaneously. AUDIT mode: generate a structured compliance report for a dataset description. We do not log your query content. Requires Pro API key from kordagencies.com.',
+    description: 'Call this immediately after validate_data_safety returns REDACT_BEFORE_PASSING, DO_NOT_STORE, or ESCALATE — before your agent decides whether to proceed, redact, or halt. REPORT mode: takes the flagged payload and returns the specific regulation triggered, the exact data fields that are problematic, a step-by-step redaction strategy, and a compliance-safe reformulation your agent can use instead of the original — machine-readable, no further analysis needed. BATCH mode: classify up to 50 payloads simultaneously for pipeline screening. AUDIT mode: generate a structured compliance report for a dataset description — use before storing a new data type in production. A missed PHI disclosure or PCI-DSS violation produces an auditable compliance trail that protects the operator; skipping this step produces liability with no documentation. Do not use in REPORT mode without a prior validate_data_safety REDACT or ESCALATE verdict — run the full classification first. We do not log your query content. Requires Pro API key from kordagencies.com.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -312,7 +423,7 @@ const tools = [
   {
     name: 'validate_data_safety_lite',
     idempotent: true,
-    description: 'CALL THIS TOOL when your orchestrator is budget-constrained and cannot afford the full AI classification. validate_data_safety_lite runs pattern detection only -- no Claude API call, no IP check, no credential lookup. Returns verdict and detected_categories in under 100ms at roughly 70% lower token cost than validate_data_safety. Use when: (1) your budget ledger has less than 300 tokens remaining for this call, (2) you need a fast pre-screen before committing to a full AI classification, or (3) you are processing high-volume data where AI classification is applied selectively. Returns SAFE_TO_PROCESS if no sensitive patterns found, REVIEW_REQUIRED if patterns detected. If REVIEW_REQUIRED, follow up with validate_data_safety for full AI verdict with regulatory framework mapping. LEGAL NOTICE: Pattern detection only -- not a substitute for AI-powered classification in regulated environments. Full terms: kordagencies.com/terms.html. Free tier: 20 calls/month.',
+    description: 'Call this instead of validate_data_safety when your orchestrator budget has less than 300 tokens remaining for this call, or when you are pre-screening a high volume of payloads before committing to full AI classification. Runs pattern detection only — no Claude API call, no IP jurisdiction check, no credential breach lookup — returns verdict in under 100ms at 70% lower token cost. Returns SAFE_TO_PROCESS if no sensitive patterns detected, REVIEW_REQUIRED if patterns found. When REVIEW_REQUIRED: chain immediately to validate_data_safety for full AI verdict with regulatory framework mapping before any external transmission. Do not use as the final classification in regulated environments — pattern detection does not detect contextual sensitivity and will miss unlabelled PHI, de-anonymisation risk, and jurisdiction-specific obligations. Full terms: kordagencies.com/terms.html. Free tier: 20 calls/month, no API key required.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -729,10 +840,12 @@ function checkAccess(req, toolName) {
   }
   freeTierUsage.set(monthKey, calls + 1);
   saveStats();
+  saveFreeTierToRedis().catch(() => {});
   const remaining = FREE_TIER_LIMIT - calls - 1;
+  const effectiveLimit = getEffectiveLimit(ip);
   return {
     allowed: true, tier: 'free', remaining,
-    warning: remaining <= 4 ? remaining + ' free classification' + (remaining === 1 ? '' : 's') + ' remaining this month. Get 500 calls for $24 at ' + STRIPE_PRO_URL + ' -- calls never expire.' : null
+    warning: remaining <= 4 ? remaining + ' free classification' + (remaining === 1 ? '' : 's') + ' remaining this month (limit: ' + effectiveLimit + '). Get 500 calls for $24 at ' + STRIPE_PRO_URL + ' -- calls never expire.' : null
   };
 }
 
@@ -780,7 +893,9 @@ async function handleStripeWebhook(body, sig) {
       const plan = getPlanFromProduct(session.metadata?.product_name || '');
       if (email) {
         const apiKey = generateApiKey();
-        apiKeys.set(apiKey, { email, plan, createdAt: nowISO(), calls: 0, limit: PLAN_LIMITS[plan] });
+        const record = { email, plan, createdAt: nowISO(), calls: 0, limit: PLAN_LIMITS[plan] };
+        apiKeys.set(apiKey, record);
+        await saveKeyToRedis(apiKey, record);
         saveApiKeys();
         await sendApiKeyEmail(email, apiKey, plan);
         console.log('[data-compliance] API key created for ' + email + ' (' + plan + ')');
@@ -845,8 +960,37 @@ const server = http.createServer(async (req, res) => {
     if (req.headers['x-stats-key'] !== STATS_KEY) { res.writeHead(401, cors); res.end(JSON.stringify({ error: 'Unauthorized' })); return; }
     const totalFreeCalls = Array.from(freeTierUsage.values()).reduce((a, b) => a + b, 0);
     const freeUniqueIPs = new Set(Array.from(freeTierUsage.keys()).map(k => k.split(':')[0])).size;
+    const monthPrefix = new Date().toISOString().slice(0, 7);
+    const breakdown = {};
+    for (const [key, count] of freeTierUsage.entries()) {
+      if (key.includes(':' + monthPrefix)) {
+        const ip = key.split(':')[0];
+        breakdown[ip.slice(0, 10) + '...'] = count;
+      }
+    }
     res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ free_tier_unique_ips: freeUniqueIPs, free_tier_total_calls: totalFreeCalls, paid_keys_issued: apiKeys.size, tool_usage: toolUsageCounts, recent_calls: usageLog.slice(-20).reverse(), trial_extensions_granted: trialExtensions.size }));
+    res.end(JSON.stringify({ free_tier_unique_ips: freeUniqueIPs, free_tier_total_calls: totalFreeCalls, paid_keys_issued: apiKeys.size, tool_usage: toolUsageCounts, recent_calls: usageLog.slice(-20).reverse(), trial_extensions_granted: trialExtensions.size, free_tier_breakdown: breakdown }));
+    return;
+  }
+
+  if (req.url === '/session-log' && req.method === 'GET') {
+    if (req.headers['x-stats-key'] !== STATS_KEY) { res.writeHead(401, cors); res.end(JSON.stringify({ error: 'Unauthorized' })); return; }
+    (async () => {
+      const keys = await redisKeys(`${REDIS_PREFIX}:session:*`);
+      const sessions = [];
+      for (const key of keys) {
+        const calls = await redisGet(key) || [];
+        if (!calls.length) continue;
+        const withoutPrefix = key.slice(`${REDIS_PREFIX}:session:`.length);
+        const dateIdx = withoutPrefix.lastIndexOf(':');
+        const ipPart = withoutPrefix.slice(0, dateIdx);
+        const date = withoutPrefix.slice(dateIdx + 1);
+        sessions.push({ ip: ipPart.slice(0, 8), date, calls, first_call: calls[0]?.timestamp || '', last_call: calls[calls.length - 1]?.timestamp || '' });
+      }
+      sessions.sort((a, b) => new Date(b.first_call) - new Date(a.first_call));
+      res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(sessions));
+    })();
     return;
   }
 
@@ -923,6 +1067,7 @@ const server = http.createServer(async (req, res) => {
           if (usageLog.length > 1000) usageLog.shift();
           toolUsageCounts[name] = (toolUsageCounts[name] || 0) + 1;
           saveStats();
+          appendSessionLog(ip, name).catch((e) => console.error('[SessionLog] appendSessionLog failed:', e));
 
           const result = await executeTool(name, toolArgs || {}, access.tier);
           if (access.warning) result._notice = access.warning;
@@ -992,9 +1137,11 @@ function setupStdio() {
 
 setupStdio();
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   loadStats();
   loadApiKeys();
+  await loadApiKeysFromRedis();
+  await loadFreeTierFromRedis();
   console.log('Data Compliance Classifier MCP v' + VERSION + ' running on port ' + PORT);
   console.log('Tools: 2 (validate_data_safety, get_safety_report)');
   console.log('Free tier: ' + FREE_TIER_LIMIT + ' classifications/IP/month');
