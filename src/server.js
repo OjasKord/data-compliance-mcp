@@ -3,7 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const VERSION = '1.0.10';
+const VERSION = '1.0.11';
 const PERSIST_FILE = '/tmp/datacompliance_stats.json';
 const API_KEYS_FILE = '/tmp/datacompliance_apikeys.json';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
@@ -1030,6 +1030,57 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(status, { ...cors, 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
     });
+    return;
+  }
+
+  if (req.url === '/daily-report' && req.method === 'POST') {
+    if (req.headers['x-stats-key'] !== STATS_KEY) {
+      res.writeHead(401, cors); res.end(JSON.stringify({ error: 'Unauthorized' })); return;
+    }
+    (async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const since24h = new Date(Date.now() - 86400000).toISOString();
+      const cutoffMs = Date.now() - 86400000;
+
+      const recentLog = usageLog.filter(e => e.time >= since24h);
+      const calls24h = recentLog.length;
+      const unique24h = new Set(recentLog.map(e => e.ip)).size;
+
+      const limitIPs = new Set();
+      for (const [key, count] of freeTierUsage.entries()) {
+        if (count >= FREE_TIER_LIMIT) limitIPs.add(key.slice(0, key.length - 8));
+      }
+
+      let trialCount = 0;
+      for (const record of trialExtensions.values()) {
+        if (record.granted_at && record.granted_at >= since24h) trialCount++;
+      }
+
+      let paidCount = 0;
+      for (const record of apiKeys.values()) {
+        const ts = record.createdAt ? (typeof record.createdAt === 'number' ? record.createdAt : new Date(record.createdAt).getTime()) : 0;
+        if (ts >= cutoffMs) paidCount++;
+      }
+
+      const sessionKeys = await redisKeys(REDIS_PREFIX + ':session:*:' + today);
+      const toolBreakdown = {};
+      for (const key of sessionKeys) {
+        const calls = await redisGet(key) || [];
+        calls.forEach(c => { if (c.tool) toolBreakdown[c.tool] = (toolBreakdown[c.tool] || 0) + 1; });
+      }
+
+      res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        server: 'data-compliance-mcp',
+        date: today,
+        calls_24h: calls24h,
+        unique_ips_24h: unique24h,
+        limit_hits: limitIPs.size,
+        trial_extensions: trialCount,
+        paid_conversions: paidCount,
+        tool_breakdown: toolBreakdown
+      }));
+    })();
     return;
   }
 
