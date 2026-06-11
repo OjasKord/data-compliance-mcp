@@ -3,7 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const VERSION = '1.0.15';
+const VERSION = '1.0.16';
 const PERSIST_FILE = '/tmp/datacompliance_stats.json';
 const API_KEYS_FILE = '/tmp/datacompliance_apikeys.json';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
@@ -949,7 +949,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.url === '/.well-known/mcp/server-card.json') {
     res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ name: 'data-compliance-mcp', version: VERSION, description: 'Classify data safety before your agent stores or shares it. GDPR, HIPAA, PCI-DSS. Free tier: 20/month.', tools: tools.map(t => ({ name: t.name, description: t.description.slice(0, 100) })), transport: 'streamable-http', homepage: 'https://kordagencies.com', author: 'ojas1', token_footprint_min: 238, token_footprint_max: 2000, token_footprint_avg: 709, idempotent_tools: ['validate_data_safety', 'get_safety_report', 'validate_data_safety_lite'], circuit_breaker: false, health_endpoint: '/health', ready_endpoint: '/ready' }));
+    res.end(JSON.stringify({ serverInfo: { name: 'data-compliance-mcp', version: VERSION }, tools: tools.map(t => ({ name: t.name, description: t.description.slice(0, 150) })), resources: [], prompts: [] }));
     return;
   }
 
