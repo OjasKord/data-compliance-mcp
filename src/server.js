@@ -3,7 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const VERSION = '1.0.13';
+const VERSION = '1.0.14';
 const PERSIST_FILE = '/tmp/datacompliance_stats.json';
 const API_KEYS_FILE = '/tmp/datacompliance_apikeys.json';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
@@ -21,6 +21,23 @@ const PLAN_LIMITS = { pro: 5000, enterprise: Infinity };
 const toolUsageCounts = {};
 const trialExtensions = new Map();
 const TRIAL_EXTENSION_CALLS = 10;
+
+const perMinuteUsage = new Map();
+
+function checkPerMinuteLimit(ip, toolName, limit) {
+  const minuteKey = ip + ':' + toolName + ':' + new Date().toISOString().slice(0, 16);
+  const count = perMinuteUsage.get(minuteKey) || 0;
+  if (count >= limit) return false;
+  perMinuteUsage.set(minuteKey, count + 1);
+  if (perMinuteUsage.size > 10000) {
+    const currentMinute = new Date().toISOString().slice(0, 16);
+    for (const [key] of perMinuteUsage) {
+      if (!key.includes(currentMinute)) perMinuteUsage.delete(key);
+    }
+  }
+  return true;
+}
+
 const STRIPE_PRO_URL = 'https://buy.stripe.com/cNidR87s9dXD0pue7Sebu0r';
 const ENTERPRISE_UPGRADE_URL = 'https://buy.stripe.com/9B6bJ0aElbPv7RW9RCebu0s';
 const STRIPE_ENTERPRISE_URL = 'https://buy.stripe.com/cNi7sKeUB8Dj7RW7Juebu0d';
@@ -1103,6 +1120,19 @@ const server = http.createServer(async (req, res) => {
           response = { jsonrpc: '2.0', id: request.id, result: { prompts: [] } };
         } else if (request.method === 'tools/call') {
           const { name, arguments: toolArgs } = request.params;
+          const killSwitchKey = 'TOOL_DISABLED_' + name.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+          if (process.env[killSwitchKey] === 'true') {
+            res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { content: [{ type: 'text', text: JSON.stringify({ error: 'This tool is temporarily unavailable for maintenance.', agent_action: 'RETRY_IN_30_MIN', retryable: true, retry_after_ms: 1800000 }) }] } }));
+            return;
+          }
+          const _rawIpKs = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+          const _clientIpKs = _rawIpKs.split(',')[0].trim();
+          if (['validate_data_safety', 'get_safety_report'].includes(name) && !checkPerMinuteLimit(_clientIpKs, name, 5)) {
+            res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { content: [{ type: 'text', text: JSON.stringify({ error: 'Rate limit exceeded — maximum 5 calls per minute per IP on AI-powered tools. Your workflow is calling this tool too rapidly.', agent_action: 'RETRY_IN_60_SEC', retryable: true, retry_after_ms: 60000, limit: 5, window: '1 minute' }) }] } }));
+            return;
+          }
           const access = checkAccess(req, name);
 
           if (!access.allowed) {
@@ -1172,8 +1202,14 @@ function setupStdio() {
         response = { jsonrpc: '2.0', id: req.id, result: { prompts: [] } };
       } else if (req.method === 'tools/call') {
         try {
-          const result = await executeTool(req.params.name, req.params.arguments || {}, 'paid');
-          response = { jsonrpc: '2.0', id: req.id, result: { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] } };
+          const _name = req.params.name;
+          const _ks = 'TOOL_DISABLED_' + (_name || '').toUpperCase().replace(/[^A-Z0-9]/g, '_');
+          if (process.env[_ks] === 'true') {
+            response = { jsonrpc: '2.0', id: req.id, result: { content: [{ type: 'text', text: JSON.stringify({ error: 'This tool is temporarily unavailable for maintenance.', agent_action: 'RETRY_IN_30_MIN', retryable: true, retry_after_ms: 1800000 }) }] } };
+          } else {
+            const result = await executeTool(_name, req.params.arguments || {}, 'paid');
+            response = { jsonrpc: '2.0', id: req.id, result: { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] } };
+          }
         } catch(e) {
           response = { jsonrpc: '2.0', id: req.id, error: { code: -32603, message: e.message, agent_action: 'RETRY_IN_2_MIN' } };
         }
