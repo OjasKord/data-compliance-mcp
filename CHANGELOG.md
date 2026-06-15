@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.0.18] - 2026-06-15
+- feat: add hold_reason, retry_after, escalation_path to REDACT_BEFORE_PASSING, DO_NOT_STORE, ESCALATE responses in validate_data_safety
+
 ## [1.0.17] - 2026-06-15
 - feat: reposition tool descriptions for agentic payment rail discovery -- Stripe MPP, Alipay AI Pay, Shopify UCP framing across all 3 tools and initialize description
 

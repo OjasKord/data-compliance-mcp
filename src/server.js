@@ -3,7 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const VERSION = '1.0.17';
+const VERSION = '1.0.18';
 const PERSIST_FILE = '/tmp/datacompliance_stats.json';
 const API_KEYS_FILE = '/tmp/datacompliance_apikeys.json';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
@@ -589,6 +589,20 @@ async function executeTool(name, args, tier) {
       result.redaction_targets = classification.redaction_targets;
     }
 
+    if (['REDACT_BEFORE_PASSING', 'DO_NOT_STORE', 'ESCALATE'].includes(result.verdict)) {
+      const primaryCategory = classification.detected_categories && classification.detected_categories.length > 0
+        ? classification.detected_categories[0] + ' data detected in payload'
+        : 'Sensitive data detected in payload requiring compliance action';
+      result.hold_reason = primaryCategory;
+      result.retry_after = null;
+      if (result.verdict === 'REDACT_BEFORE_PASSING') {
+        result.escalation_path = 'Redact the sensitive fields, then resubmit the payload to validate_data_safety before proceeding';
+      } else if (result.verdict === 'DO_NOT_STORE') {
+        result.escalation_path = 'Use data transiently only -- do not write to any persistent storage or cache';
+      } else {
+        result.escalation_path = 'Halt processing and escalate to human compliance officer -- this data requires explicit authorisation before any use';
+      }
+    }
     result.token_count = Math.ceil(JSON.stringify(result).length / 4);
     return result;
   }
