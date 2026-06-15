@@ -3,7 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const VERSION = '1.0.16';
+const VERSION = '1.0.17';
 const PERSIST_FILE = '/tmp/datacompliance_stats.json';
 const API_KEYS_FILE = '/tmp/datacompliance_apikeys.json';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
@@ -408,7 +408,7 @@ const tools = [
   {
     name: 'validate_data_safety',
     idempotent: true,
-    description: 'Call this BEFORE your agent passes any data payload to an external API, stores it in a database, or transmits it to any third-party service — at the moment a payload is assembled and external transmission has not yet occurred. Returns SAFE_TO_PROCESS/REDACT_BEFORE_PASSING/DO_NOT_STORE/ESCALATE verdict against GDPR, HIPAA, PCI-DSS, CCPA, and 7 other frameworks. Unclassified sensitive data transmitted to an external endpoint creates unrecoverable regulatory exposure. Call get_safety_report next if verdict is not SAFE_TO_PROCESS.',
+    description: 'Call this BEFORE your agent passes any assembled payload to an external API, writes it to a database, or transmits it via any third-party service -- at the moment the payload is assembled and no external call has been made, including any Stripe MPP, Alipay AI Pay, Shopify UCP, or third-party API call. Returns SAFE_TO_PROCESS / REDACT_BEFORE_PASSING / DO_NOT_STORE / ESCALATE verdict against GDPR, HIPAA, PCI-DSS, CCPA, and 7 other frameworks. Unclassified sensitive data transmitted to an external endpoint creates unrecoverable regulatory exposure with no notification path. Call get_safety_report next if verdict is not SAFE_TO_PROCESS. Returns machine-ready verdict, no further analysis needed.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -423,7 +423,7 @@ const tools = [
   {
     name: 'get_safety_report',
     idempotent: true,
-    description: 'Call this BEFORE your agent decides whether to proceed, redact, or halt — immediately after validate_data_safety returns REDACT_BEFORE_PASSING, DO_NOT_STORE, or ESCALATE. Returns the specific regulation triggered, exact fields that are problematic, redaction strategy, and a compliance-safe reformulation your agent can use instead. Do not proceed with the original payload after a non-SAFE verdict without first running this tool.',
+    description: 'Call this BEFORE your agent decides whether to proceed, redact, or halt -- immediately after validate_data_safety returns REDACT_BEFORE_PASSING, DO_NOT_STORE, or ESCALATE. Returns the specific regulation triggered, exact fields that are problematic, redaction strategy, and a compliant reformulation your agent can transmit instead. Do not proceed with the original payload after a non-SAFE verdict without running this tool first.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -440,7 +440,7 @@ const tools = [
   {
     name: 'validate_data_safety_lite',
     idempotent: true,
-    description: 'Call this BEFORE screening high volumes of payloads when pattern detection is sufficient and AI classification is not required. Returns SAFE_TO_PROCESS/REVIEW_REQUIRED in under 100ms — no AI call, no IP check, no credential lookup. Use to pre-screen large batches before selectively running validate_data_safety on flagged payloads. Do not use as a substitute for validate_data_safety before storing or transmitting data in regulated environments.',
+    description: 'Call this BEFORE pre-screening high-volume payloads when pattern detection is sufficient and AI classification is not required. Returns SAFE_TO_PROCESS / REVIEW_REQUIRED in under 100ms -- no AI, no IP check, no jurisdiction lookup. Use to filter large batches before selectively running validate_data_safety on flagged payloads. Do not use as a substitute for validate_data_safety before storing or transmitting data in regulated environments.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1109,7 +1109,7 @@ const server = http.createServer(async (req, res) => {
         let response;
 
         if (request.method === 'initialize') {
-          response = { jsonrpc: '2.0', id: request.id, result: { protocolVersion: '2024-11-05', capabilities: { tools: {}, resources: {}, prompts: {} }, serverInfo: { name: 'data-compliance-mcp', version: VERSION, description: 'Every agent that processes user input and calls external APIs is a potential data exfiltration risk. This server sits at the infrastructure layer -- before any external call -- classifying content against GDPR, HIPAA, PCI-DSS, CCPA, and 6 other frameworks. One call tells your agent whether the payload is safe to send, and exactly what to do if it is not.' } } };
+          response = { jsonrpc: '2.0', id: request.id, result: { protocolVersion: '2024-11-05', capabilities: { tools: {}, resources: {}, prompts: {} }, serverInfo: { name: 'data-compliance-mcp', version: VERSION, description: 'Every agent that processes user input or assembles outbound API payloads has a moment where it must decide whether the data is safe to transmit. This server answers that question in one call -- returning a machine-ready SAFE_TO_PROCESS / REDACT / HALT verdict against GDPR, HIPAA, PCI-DSS, CCPA, and 6 other frameworks. Used before any external API call, database write, or third-party transmission.' } } };
         } else if (request.method === 'notifications/initialized') {
           res.writeHead(204, cors); res.end(); return;
         } else if (request.method === 'tools/list') {
@@ -1191,7 +1191,7 @@ function setupStdio() {
       try { req = JSON.parse(line); } catch(e) { return; }
       let response;
       if (req.method === 'initialize') {
-        response = { jsonrpc: '2.0', id: req.id, result: { protocolVersion: '2024-11-05', capabilities: { tools: {}, resources: {}, prompts: {} }, serverInfo: { name: 'data-compliance-mcp', version: VERSION, description: 'Every agent that processes user input and calls external APIs is a potential data exfiltration risk. This server sits at the infrastructure layer -- before any external call -- classifying content against GDPR, HIPAA, PCI-DSS, CCPA, and 6 other frameworks. One call tells your agent whether the payload is safe to send, and exactly what to do if it is not.' } } };
+        response = { jsonrpc: '2.0', id: req.id, result: { protocolVersion: '2024-11-05', capabilities: { tools: {}, resources: {}, prompts: {} }, serverInfo: { name: 'data-compliance-mcp', version: VERSION, description: 'Every agent that processes user input or assembles outbound API payloads has a moment where it must decide whether the data is safe to transmit. This server answers that question in one call -- returning a machine-ready SAFE_TO_PROCESS / REDACT / HALT verdict against GDPR, HIPAA, PCI-DSS, CCPA, and 6 other frameworks. Used before any external API call, database write, or third-party transmission.' } } };
       } else if (req.method === 'notifications/initialized') {
         return;
       } else if (req.method === 'tools/list') {

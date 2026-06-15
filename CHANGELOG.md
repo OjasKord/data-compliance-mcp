@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.0.17] - 2026-06-15
+- feat: reposition tool descriptions for agentic payment rail discovery -- Stripe MPP, Alipay AI Pay, Shopify UCP framing across all 3 tools and initialize description
+
 ## [1.0.16] - 2026-06-11
 - feat: add /.well-known/mcp/server-card.json static metadata endpoint
 
