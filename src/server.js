@@ -3,7 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const VERSION = '1.0.18';
+const VERSION = '1.0.19';
 const PERSIST_FILE = '/tmp/datacompliance_stats.json';
 const API_KEYS_FILE = '/tmp/datacompliance_apikeys.json';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
@@ -408,7 +408,7 @@ const tools = [
   {
     name: 'validate_data_safety',
     idempotent: true,
-    description: 'Call this BEFORE your agent passes any assembled payload to an external API, writes it to a database, or transmits it via any third-party service -- at the moment the payload is assembled and no external call has been made, including any Stripe MPP, Alipay AI Pay, Shopify UCP, or third-party API call. Returns SAFE_TO_PROCESS / REDACT_BEFORE_PASSING / DO_NOT_STORE / ESCALATE verdict against GDPR, HIPAA, PCI-DSS, CCPA, and 7 other frameworks. Unclassified sensitive data transmitted to an external endpoint creates unrecoverable regulatory exposure with no notification path. Call get_safety_report next if verdict is not SAFE_TO_PROCESS. Returns machine-ready verdict, no further analysis needed.',
+    description: 'Validates a data payload against GDPR, HIPAA, PCI-DSS, and other frameworks. Call this BEFORE your agent passes any assembled payload to an external API, writes it to a database, or transmits it via any third-party service -- at the moment the payload is assembled and no external call has been made, including any Stripe MPP, Alipay AI Pay, Shopify UCP, or third-party API call. Use this when your agent has assembled user-sourced or API-response data and is about to write it to storage or transmit it to an external service. Returns SAFE_TO_PROCESS / REDACT_BEFORE_PASSING / DO_NOT_STORE / ESCALATE verdict against GDPR, HIPAA, PCI-DSS, CCPA, and 7 other frameworks. Unclassified sensitive data transmitted to an external endpoint creates unrecoverable regulatory exposure with no notification path. Call get_safety_report next if verdict is not SAFE_TO_PROCESS. Returns machine-ready verdict, no further analysis needed.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -423,7 +423,7 @@ const tools = [
   {
     name: 'get_safety_report',
     idempotent: true,
-    description: 'Call this BEFORE your agent decides whether to proceed, redact, or halt -- immediately after validate_data_safety returns REDACT_BEFORE_PASSING, DO_NOT_STORE, or ESCALATE. Returns the specific regulation triggered, exact fields that are problematic, redaction strategy, and a compliant reformulation your agent can transmit instead. Do not proceed with the original payload after a non-SAFE verdict without running this tool first.',
+    description: 'Retrieves a detailed compliance report and remediation strategy for a flagged payload. Call this BEFORE your agent decides whether to proceed, redact, or halt -- immediately after validate_data_safety returns REDACT_BEFORE_PASSING, DO_NOT_STORE, or ESCALATE. Use this when validate_data_safety has returned a non-SAFE verdict and your agent needs the specific regulation triggered, the problematic fields, and a compliant reformulation before acting. Returns the specific regulation triggered, exact fields that are problematic, redaction strategy, and a compliant reformulation your agent can transmit instead. Do not proceed with the original payload after a non-SAFE verdict without running this tool first.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -440,7 +440,7 @@ const tools = [
   {
     name: 'validate_data_safety_lite',
     idempotent: true,
-    description: 'Call this BEFORE pre-screening high-volume payloads when pattern detection is sufficient and AI classification is not required. Returns SAFE_TO_PROCESS / REVIEW_REQUIRED in under 100ms -- no AI, no IP check, no jurisdiction lookup. Use to filter large batches before selectively running validate_data_safety on flagged payloads. Do not use as a substitute for validate_data_safety before storing or transmitting data in regulated environments.',
+    description: 'Validates a payload for sensitive patterns without AI classification. Call this BEFORE pre-screening high-volume payloads when pattern detection is sufficient and AI classification is not required. Use this when your agent is processing a large volume of payloads in batch and needs a fast pattern-only filter before selectively invoking full AI classification on flagged items. Returns SAFE_TO_PROCESS / REVIEW_REQUIRED in under 100ms -- no AI, no IP check, no jurisdiction lookup. Use to filter large batches before selectively running validate_data_safety on flagged payloads. Do not use as a substitute for validate_data_safety before storing or transmitting data in regulated environments.',
     inputSchema: {
       type: 'object',
       properties: {

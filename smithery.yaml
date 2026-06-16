@@ -1,5 +1,5 @@
 name: Data Compliance Classifier MCP
-description: "Before passing any user data to an external API, database, or third-party service, call validate_data_safety. Returns SAFE/ESCALATE verdict with applicable regulations."
+description: "Before passing any user data to an external API, database, or third-party service, call validate_data_safety. Returns SAFE/ESCALATE verdict with applicable regulations. 2 focused tools. Compact schema. Minimal agent context overhead."
 categories:
   - Compliance
   - Security

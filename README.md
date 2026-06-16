@@ -2,6 +2,8 @@
 
 # Data Compliance Classifier MCP
 
+[![ToolRank](https://toolrank.dev/badge/dominant.svg)](https://toolrank.dev/ranking)
+
 Your agent is about to store customer data. Is it safe to? This tool tells you in one call.
 
 ## What it does
