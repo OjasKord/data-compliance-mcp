@@ -3,7 +3,7 @@
   "name": "io.github.OjasKord/data-compliance-mcp",
   "title": "Data Compliance Classifier MCP",
   "description": "Classify data safety before storing or sharing. GDPR, HIPAA, PCI-DSS, CCPA. AI-powered.",
-  "version": "1.0.6",
+  "version": "1.0.19",
   "websiteUrl": "https://kordagencies.com",
   "repository": {
     "url": "https://github.com/OjasKord/data-compliance-mcp",
@@ -13,13 +13,30 @@
     {
       "registryType": "npm",
       "identifier": "data-compliance-mcp",
-      "version": "1.0.6",
-      "transport": { "type": "stdio" },
+      "version": "1.0.19",
+      "transport": {
+        "type": "stdio"
+      },
       "environmentVariables": [
-        { "name": "ANTHROPIC_API_KEY", "description": "Anthropic API key for AI classification", "isRequired": true, "isSecret": true },
-        { "name": "ABUSEIPDB_API_KEY", "description": "AbuseIPDB API key for threat intelligence (optional)", "isRequired": false, "isSecret": true }
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "description": "Anthropic API key for AI classification",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "ABUSEIPDB_API_KEY",
+          "description": "AbuseIPDB API key for threat intelligence (optional)",
+          "isRequired": false,
+          "isSecret": true
+        }
       ]
     }
   ],
-  "remotes": [{ "type": "streamable-http", "url": "https://data-compliance-mcp-production.up.railway.app" }]
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://data-compliance-mcp-production.up.railway.app"
+    }
+  ]
 }
