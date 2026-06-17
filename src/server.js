@@ -3,7 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const VERSION = '1.0.19';
+const VERSION = '1.0.20';
 const PERSIST_FILE = '/tmp/datacompliance_stats.json';
 const API_KEYS_FILE = '/tmp/datacompliance_apikeys.json';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
@@ -41,6 +41,7 @@ function checkPerMinuteLimit(ip, toolName, limit) {
 const STRIPE_PRO_URL = 'https://buy.stripe.com/cNidR87s9dXD0pue7Sebu0r';
 const ENTERPRISE_UPGRADE_URL = 'https://buy.stripe.com/9B6bJ0aElbPv7RW9RCebu0s';
 const STRIPE_ENTERPRISE_URL = 'https://buy.stripe.com/cNi7sKeUB8Dj7RW7Juebu0d';
+const ALLOWED_PAYMENT_LINK_IDS = ['plink_1TQzEjD6WvRe6sn35lz6hsVZ', 'plink_1TQzGlD6WvRe6sn3o85eJaLV', 'plink_1TObMjD6WvRe6sn3jOhhQVLR'];
 
 const REDIS_PREFIX = 'dcc';
 const FREE_TIER_REDIS_KEY = 'dcc:free_tier_usage';
@@ -920,6 +921,11 @@ async function handleStripeWebhook(body, sig) {
     const event = JSON.parse(body);
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object;
+      const paymentLinkId = session.payment_link;
+      if (paymentLinkId && !ALLOWED_PAYMENT_LINK_IDS.includes(paymentLinkId)) {
+        console.log('[data-compliance] Webhook received but payment link ' + paymentLinkId + ' not for this server — ignoring.');
+        return { received: true, ignored: true };
+      }
       const email = session.customer_email || session.customer_details?.email;
       const plan = getPlanFromProduct(session.metadata?.product_name || '');
       if (email) {
