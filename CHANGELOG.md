@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.0.21] - 2026-06-18
+- feat: revoke API key on Stripe refund
+
 ## [1.0.20] - 2026-06-17
 - fix: Stripe webhook now validates payment_link ID — ignores events not belonging to this server
 
