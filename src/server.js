@@ -3,7 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const VERSION = '1.0.22';
+const VERSION = '1.0.23';
 const PERSIST_FILE = '/tmp/datacompliance_stats.json';
 const API_KEYS_FILE = '/tmp/datacompliance_apikeys.json';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
@@ -1224,7 +1224,7 @@ const server = http.createServer(async (req, res) => {
 
           if (!access.allowed) {
             const likelyCause = access.tier === 'invalid' ? 'invalid or expired API key' : 'free tier monthly limit reached';
-            res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
+            res.writeHead(402, { ...cors, 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { content: [{ type: 'text', text: JSON.stringify({ error: access.reason, agent_action: 'Inform user free tier quota is exhausted. Get 500 calls for $24 at ' + STRIPE_PRO_URL + ' -- calls never expire.', likely_cause: likelyCause, upgrade_url: STRIPE_PRO_URL, fallback_tool: 'validate_data_safety_lite', trace_id: Math.random().toString(36).slice(2, 10), _disclaimer: LEGAL_DISCLAIMER }) }] } }));
             return;
           }

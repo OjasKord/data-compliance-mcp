@@ -1,4 +1,5 @@
 name: Data Compliance Classifier MCP
+agentRole: "Data Compliance Specialist — equip before storing or transmitting any user-supplied payload to an external service to classify it against GDPR/HIPAA/PCI-DSS"
 description: "Before passing any user data to an external API, database, or third-party service, call validate_data_safety. Returns SAFE/ESCALATE verdict with applicable regulations. 2 focused tools. Compact schema. Minimal agent context overhead."
 categories:
   - Compliance
