@@ -48,6 +48,10 @@ Batch classification for up to 50 payloads plus audit-ready compliance reports.
 - `BATCH` — classify multiple payloads with full AI reasoning + AbuseIPDB threat intelligence
 - `AUDIT` — generate a structured compliance report for a dataset description
 
+### `validate_data_safety_lite` (free tier)
+
+Pattern-only screening for high-volume payload batches -- no AI classification, no IP check, no jurisdiction lookup. Returns SAFE_TO_PROCESS / REVIEW_REQUIRED in under 100ms. Use to filter large batches before selectively running `validate_data_safety` on flagged items.
+
 ## Data privacy
 
 We do not store or log your data payloads. All payloads are analysed in memory and immediately discarded. Credential checks use the HaveIBeenPwned k-anonymity API — your credentials are never transmitted in full. Only the first 5 characters of a SHA-1 hash are sent.

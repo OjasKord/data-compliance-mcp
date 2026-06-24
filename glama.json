@@ -13,6 +13,10 @@
     {
       "name": "get_safety_report",
       "description": "Batch classify up to 50 payloads or generate an audit-ready compliance report. Paid tier."
+    },
+    {
+      "name": "validate_data_safety_lite",
+      "description": "Pattern-only screening for high-volume payload batches -- no AI, no IP check, no jurisdiction lookup. Returns SAFE_TO_PROCESS/REVIEW_REQUIRED in under 100ms."
     }
   ]
 }
