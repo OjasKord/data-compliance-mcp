@@ -3,7 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const VERSION = '1.0.24';
+const VERSION = '1.0.25';
 const FIRST_DEPLOYED = '2026-04-21T09:53:12Z';
 const LIFETIME_CALLS_REDIS_KEY = 'dcc:lifetime_calls';
 const UPTIME_HEARTBEAT_KEY = 'dcc:uptime:heartbeat_count';
@@ -23,6 +23,8 @@ const freeTierUsage = new Map();
 const usageLog = [];
 const FREE_TIER_LIMIT = 20;
 const FREE_TIER_WARNING = 16;
+// Caching/staleness policy per tool, in seconds.
+const VERDICT_TTL = { validate_data_safety: 86400, validate_data_safety_lite: 86400, get_safety_report: 86400 };
 const apiKeys = new Map();
 const PLAN_LIMITS = { pro: 5000, enterprise: Infinity };
 const toolUsageCounts = {};
@@ -698,6 +700,8 @@ async function executeTool(name, args, tier) {
       patterns_detected: patterns,
       credential_check: credentialCheck,
       analysis_type: 'AI-powered classification -- NOT a simple pattern match',
+      verdict_ttl: VERDICT_TTL.validate_data_safety,
+      data_source_status: 'full',
       source_url: 'api.anthropic.com + ipinfo.io + api.pwnedpasswords.com',
       checked_at: checkedAt,
       _disclaimer: LEGAL_DISCLAIMER
@@ -781,6 +785,8 @@ async function executeTool(name, args, tier) {
           confidence: report.confidence,
           patterns_detected: patterns,
           analysis_type: 'AI-powered compliance remediation -- NOT a simple pattern match',
+          verdict_ttl: VERDICT_TTL.get_safety_report,
+          data_source_status: 'full',
           checked_at: checkedAt,
           _disclaimer: LEGAL_DISCLAIMER
         };
@@ -903,6 +909,8 @@ async function executeTool(name, args, tier) {
         },
         results,
         analysis_type: 'AI-powered batch classification with threat intelligence',
+        verdict_ttl: VERDICT_TTL.get_safety_report,
+        data_source_status: errors.length > 0 ? 'degraded' : 'full',
         checked_at: checkedAt,
         _disclaimer: LEGAL_DISCLAIMER
       };
@@ -931,6 +939,8 @@ async function executeTool(name, args, tier) {
           dataset_description,
           report,
           analysis_type: 'AI-powered compliance audit — NOT legal advice',
+          verdict_ttl: VERDICT_TTL.get_safety_report,
+          data_source_status: 'full',
           checked_at: checkedAt,
           _disclaimer: LEGAL_DISCLAIMER
         };
@@ -962,6 +972,8 @@ async function executeTool(name, args, tier) {
       patterns_detected: patterns,
       sensitivity_level: sensitivityLevel,
       analysis_type: 'Pattern detection only -- no AI analysis. Use validate_data_safety for full AI verdict.',
+      verdict_ttl: VERDICT_TTL.validate_data_safety_lite,
+      data_source_status: 'full',
       checked_at: checkedAt,
       _disclaimer: LEGAL_DISCLAIMER
     };
@@ -1417,6 +1429,7 @@ const server = http.createServer(async (req, res) => {
 
           const result = await executeTool(name, toolArgs || {}, access.tier);
           if (access.warning) result._notice = access.warning;
+          result.calls_remaining = access.tier === 'free' ? Math.max(0, access.remaining || 0) : 'unlimited';
 
           response = { jsonrpc: '2.0', id: request.id, result: { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] } };
         } else {
@@ -1473,6 +1486,7 @@ function setupStdio() {
             response = { jsonrpc: '2.0', id: req.id, result: { content: [{ type: 'text', text: JSON.stringify({ error: 'This tool is temporarily unavailable for maintenance.', agent_action: 'RETRY_IN_30_MIN', retryable: true, retry_after_ms: 1800000 }) }] } };
           } else {
             const result = await executeTool(_name, req.params.arguments || {}, 'paid');
+            result.calls_remaining = 'unlimited';
             response = { jsonrpc: '2.0', id: req.id, result: { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] } };
           }
         } catch(e) {

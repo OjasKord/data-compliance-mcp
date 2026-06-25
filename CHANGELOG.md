@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.25] - 2026-06-25
+- feat: calls_remaining field added to every successful tool response -- "unlimited" for paid keys, numeric free-tier headroom otherwise
+- feat: verdict_ttl field added to validate_data_safety, validate_data_safety_lite, get_safety_report responses (86400s/24h each)
+- feat: data_source_status field added (full/degraded/partial) -- get_safety_report BATCH mode reports "degraded" when AI classification fails for any individual payload in the batch (AI is the critical source for this server); validate_data_safety_lite is always "full" (pattern-only, no AI dependency)
+
 ## [1.0.24] - 2026-06-24
 - feat: unauthenticated /public-stats endpoint -- first_deployed, lifetime tool calls, uptime %, version, for agent orchestrators evaluating server trustworthiness
 - feat: /process-trial-followups endpoint + 24h follow-up record on trial-extension grant
