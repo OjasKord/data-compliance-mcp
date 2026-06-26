@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.0.26] - 2026-06-26
+- fix: trial extension requests now written to Redis (dcc:trial:{email}) on grant -- permanent audit trail that survives redeploys; previously in-memory only
+
 ## [1.0.25] - 2026-06-25
 - feat: calls_remaining field added to every successful tool response -- "unlimited" for paid keys, numeric free-tier headroom otherwise
 - feat: verdict_ttl field added to validate_data_safety, validate_data_safety_lite, get_safety_report responses (86400s/24h each)
