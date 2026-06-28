@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.28] - 2026-06-28
+- fix: gate email dedup — notifyGateHit now writes dcc:gate_email:{ip} to Redis with 1-hour TTL; retries within the hour suppressed
+- fix: 402 gate response agent_action changed to HALT_WORKFLOW; added retryable: false, retry_after_ms: null
+- fix: trial_extension structured field added explicitly to 402 gate response
+
+## [1.0.27] - 2026-06-28
+- feat: owner key bypass (OWNER_KEY env var) — fleet owner bypasses free tier and paid-only gates; usage logged to dcc:owner_calls:YYYY-MM in Redis
+
 ## [1.0.26] - 2026-06-26
 - fix: trial extension requests now written to Redis (dcc:trial:{email}) on grant -- permanent audit trail that survives redeploys; previously in-memory only
 

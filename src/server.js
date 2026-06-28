@@ -3,7 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const VERSION = '1.0.27';
+const VERSION = '1.0.28';
 const FIRST_DEPLOYED = '2026-04-21T09:53:12Z';
 const LIFETIME_CALLS_REDIS_KEY = 'dcc:lifetime_calls';
 const UPTIME_HEARTBEAT_KEY = 'dcc:uptime:heartbeat_count';
@@ -1017,7 +1017,7 @@ async function checkAccess(req, toolName) {
   const monthKey = getMonthKey(ip);
   const calls = freeTierUsage.get(monthKey) || 0;
   if (calls >= FREE_TIER_LIMIT) {
-    notifyGateHit('Data Compliance Classifier', ip, toolName, calls, STRIPE_PRO_URL);
+    notifyGateHit('Data Compliance Classifier', ip, toolName, calls, STRIPE_PRO_URL).catch(() => {});
     recordFleetGateHit(ip).catch(() => {});
     const crossServerNote = await buildCrossServerNote(ip);
     return {
@@ -1069,10 +1069,17 @@ function truncateIp(ip) {
   return parts.length === 4 ? parts.slice(0, 3).join('.') + '.0' : ip;
 }
 
-function notifyGateHit(serverName, ip, toolName, totalCalls, stripeUrl) {
-  const maskedIp = truncateIp(ip);
-  const html = '<p>Server: ' + serverName + '</p><p>IP: ' + maskedIp + '</p><p>Tool: ' + (toolName || 'unknown') + '</p><p>Calls this month: ' + totalCalls + '</p><p>Time: ' + new Date().toISOString() + '</p><p>Upgrade: ' + stripeUrl + '</p>';
-  sendEmail('ojas@kordagencies.com', '[Gate Hit] ' + serverName + ' — ' + maskedIp + ' hit free tier limit', html)
+async function notifyGateHit(serverName, ip, toolName, totalCalls, stripeUrl) {
+  const ip24 = truncateIp(ip);
+  const dedupKey = REDIS_PREFIX + ':gate_email:' + ip24;
+  try {
+    const recent = await redisGet(dedupKey);
+    if (recent) { console.log('[GateNotify] suppressed duplicate for ' + ip24); return; }
+    await redisSet(dedupKey, new Date().toISOString());
+    await redisExpire(dedupKey, 3600);
+  } catch(e) { /* Redis unavailable — fall through and send */ }
+  const html = '<p>Server: ' + serverName + '</p><p>IP: ' + ip24 + '</p><p>Tool: ' + (toolName || 'unknown') + '</p><p>Calls this month: ' + totalCalls + '</p><p>Time: ' + new Date().toISOString() + '</p><p>Upgrade: ' + stripeUrl + '</p>';
+  sendEmail('ojas@kordagencies.com', '[Gate Hit] ' + serverName + ' — ' + ip24 + ' hit free tier limit', html)
     .catch(e => console.error('[GateNotify] failed:', e.message));
 }
 
@@ -1426,7 +1433,7 @@ const server = http.createServer(async (req, res) => {
           if (!access.allowed) {
             const likelyCause = access.tier === 'invalid' ? 'invalid or expired API key' : 'free tier monthly limit reached';
             res.writeHead(402, { ...cors, 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { content: [{ type: 'text', text: JSON.stringify({ error: access.reason, agent_action: 'Inform user free tier quota is exhausted. Get 500 calls for $24 at ' + STRIPE_PRO_URL + ' -- calls never expire.', likely_cause: likelyCause, upgrade_url: STRIPE_PRO_URL, fallback_tool: 'validate_data_safety_lite', trace_id: Math.random().toString(36).slice(2, 10), _disclaimer: LEGAL_DISCLAIMER }) }] } }));
+            res.end(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { content: [{ type: 'text', text: JSON.stringify({ error: access.reason, agent_action: 'HALT_WORKFLOW — free tier exhausted. Do not retry this tool. Surface this error to the user immediately. The user must either POST /trial-extension (free, no card) or upgrade at ' + STRIPE_PRO_URL + ' to continue.', likely_cause: likelyCause, retryable: false, retry_after_ms: null, upgrade_url: STRIPE_PRO_URL, trial_extension: access.trial_extension || { endpoint: '/trial-extension', method: 'POST', body: { name: 'string', email: 'string', use_case: 'string' } }, fallback_tool: 'validate_data_safety_lite', trace_id: Math.random().toString(36).slice(2, 10), _disclaimer: LEGAL_DISCLAIMER }) }] } }));
             return;
           }
 
