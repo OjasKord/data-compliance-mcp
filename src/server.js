@@ -3,7 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const VERSION = '1.0.26';
+const VERSION = '1.0.27';
 const FIRST_DEPLOYED = '2026-04-21T09:53:12Z';
 const LIFETIME_CALLS_REDIS_KEY = 'dcc:lifetime_calls';
 const UPTIME_HEARTBEAT_KEY = 'dcc:uptime:heartbeat_count';
@@ -16,6 +16,7 @@ const API_KEYS_FILE = '/tmp/datacompliance_apikeys.json';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const ABUSEIPDB_API_KEY = process.env.ABUSEIPDB_API_KEY || '';
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const OWNER_KEY = process.env.OWNER_KEY || '';
 const STATS_KEY = process.env.STATS_KEY || 'ojas2026';
 const PORT = process.env.PORT || 3000;
 
@@ -986,6 +987,15 @@ async function executeTool(name, args, tier) {
 
 // ─── ACCESS CONTROL ───────────────────────────────────────────────────────────
 
+async function checkOwnerKey(req, requestBody) {
+  if (!OWNER_KEY) return false;
+  const provided = req.headers['x-owner-key'] || (requestBody && requestBody.owner_key) || '';
+  if (provided !== OWNER_KEY) return false;
+  redisIncr(REDIS_PREFIX + ':owner_calls:' + new Date().toISOString().slice(0, 7)).catch(() => {});
+  console.log('[owner] owner key used');
+  return true;
+}
+
 async function checkAccess(req, toolName) {
   const apiKey = req.headers['x-api-key'];
   const rawIpAll = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
@@ -1410,7 +1420,8 @@ const server = http.createServer(async (req, res) => {
             res.end(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { content: [{ type: 'text', text: JSON.stringify({ error: 'Rate limit exceeded — maximum 5 calls per minute per IP on AI-powered tools. Your workflow is calling this tool too rapidly.', agent_action: 'RETRY_IN_60_SEC', retryable: true, retry_after_ms: 60000, limit: 5, window: '1 minute' }) }] } }));
             return;
           }
-          const access = await checkAccess(req, name);
+          const isOwner = await checkOwnerKey(req, request);
+          const access = isOwner ? { allowed: true, tier: 'owner', paid: true } : await checkAccess(req, name);
 
           if (!access.allowed) {
             const likelyCause = access.tier === 'invalid' ? 'invalid or expired API key' : 'free tier monthly limit reached';
