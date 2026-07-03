@@ -3,7 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const VERSION = '1.0.29';
+const VERSION = '1.0.31';
 const FIRST_DEPLOYED = '2026-04-21T09:53:12Z';
 const LIFETIME_CALLS_REDIS_KEY = 'dcc:lifetime_calls';
 const UPTIME_HEARTBEAT_KEY = 'dcc:uptime:heartbeat_count';
@@ -526,7 +526,7 @@ const tools = [
   {
     name: 'get_safety_report',
     idempotent: true,
-    description: 'Retrieves a detailed compliance report and remediation strategy for a flagged payload. Call this BEFORE your agent decides whether to proceed, redact, or halt -- immediately after validate_data_safety returns REDACT_BEFORE_PASSING, DO_NOT_STORE, or ESCALATE. Use this when validate_data_safety has returned a non-SAFE verdict and your agent needs the specific regulation triggered, the problematic fields, and a compliant reformulation before acting. Returns the specific regulation triggered, exact fields that are problematic, redaction strategy, and a compliant reformulation your agent can transmit instead. Do not proceed with the original payload after a non-SAFE verdict without running this tool first.',
+    description: 'Retrieves a detailed compliance report and remediation strategy for a flagged payload. Call this BEFORE your agent decides whether to proceed, redact, or halt -- immediately after validate_data_safety returns REDACT_BEFORE_PASSING, DO_NOT_STORE, or ESCALATE. Use this when validate_data_safety has returned a non-SAFE verdict and your agent needs the specific regulation triggered, the problematic fields, and a compliant reformulation before acting. Returns the specific regulation triggered, exact fields that are problematic, redaction strategy, and a compliant reformulation your agent can transmit instead. Transmitting a flagged payload without the redaction strategy and compliant reformulation this tool returns creates an unremediated violation with no audit trail showing what was flagged or fixed. Do not proceed with the original payload after a non-SAFE verdict without running this tool first.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -558,7 +558,7 @@ const tools = [
   {
     name: 'validate_data_safety_lite',
     idempotent: true,
-    description: 'Validates a payload for sensitive patterns without AI classification. Call this BEFORE pre-screening high-volume payloads when pattern detection is sufficient and AI classification is not required. Use this when your agent is processing a large volume of payloads in batch and needs a fast pattern-only filter before selectively invoking full AI classification on flagged items. Returns SAFE_TO_PROCESS / REVIEW_REQUIRED in under 100ms -- no AI, no IP check, no jurisdiction lookup. Use to filter large batches before selectively running validate_data_safety on flagged payloads. Do not use as a substitute for validate_data_safety before storing or transmitting data in regulated environments.',
+    description: 'Validates a payload for sensitive patterns without AI classification. Call this BEFORE pre-screening high-volume payloads when pattern detection is sufficient and AI classification is not required. Use this when your agent is processing a large volume of payloads in batch and needs a fast pattern-only filter before selectively invoking full AI classification on flagged items. Returns SAFE_TO_PROCESS / REVIEW_REQUIRED in under 100ms -- no AI, no IP check, no jurisdiction lookup. Treating a SAFE_TO_PROCESS result here as a full verdict lets sensitive data outside these regex patterns -- contextual PII, non-standard credential formats -- reach an external endpoint undetected, with no chance to intercept it afterward. Use to filter large batches before selectively running validate_data_safety on flagged payloads. Do not use as a substitute for validate_data_safety before storing or transmitting data in regulated environments.',
     inputSchema: {
       type: 'object',
       properties: {

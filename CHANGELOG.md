@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.0.31] - 2026-07-03
+- fix: tool description gap — get_safety_report and validate_data_safety_lite now state a specific irreversible consequence of skipping the tool, per the 5-element description pattern
+
 ## [1.0.29] - 2026-06-29
 - feat: add GET /.well-known/glama.json ownership endpoint for Glama registry verification
 
