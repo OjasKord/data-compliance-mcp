@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.33] - 2026-07-31
+- fix: gate hits (free-tier exhausted, paid-limit exhausted) now increment usageLog/toolUsageCounts/session log before the early return, so /daily-report and /stats see gate volume as events instead of being blind to them (new `gate_hits_24h` field)
+- fix: usageLog and toolUsageCounts moved to Redis-backed persistence (load-on-startup + fire-and-forget write), matching the freeTierUsage pattern — previously reset on every redeploy
+- removed: notifyGateHit() — raw free-tier gate hits no longer send an email (still increment counters, still return 402). Email now fires only on a trial-extension request or a Stripe payment event
+- added: Redis-independent in-process circuit breaker (20 emails/hour) on the remaining email paths (trial-extension notify/confirm/follow-up, paid API key delivery) so a Redis outage can't fail-open into an email flood (Lesson 209 pattern)
+
 ## [1.0.31] - 2026-07-03
 - fix: tool description gap — get_safety_report and validate_data_safety_lite now state a specific irreversible consequence of skipping the tool, per the 5-element description pattern
 
