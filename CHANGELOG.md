@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.34] - 2026-08-19
+- security: trial-extension policy changed to one grant per IP, ever. New Redis key `trial_ext_granted:{ipSafe}` (no TTL) is the authoritative dedup — never keyed on name/email, which are attacker-controlled and trivially rotated. Repeat requests from an already-granted IP get HTTP 200 with `granted:false` and a message pointing to the paid upgrade path, not a re-grant.
+- added: Redis-independent in-process circuit breaker (5 new grants/hour/server) as a backstop for the per-IP dedup in case Redis is unreachable.
+
 ## [1.0.33] - 2026-07-31
 - fix: gate hits (free-tier exhausted, paid-limit exhausted) now increment usageLog/toolUsageCounts/session log before the early return, so /daily-report and /stats see gate volume as events instead of being blind to them (new `gate_hits_24h` field)
 - fix: usageLog and toolUsageCounts moved to Redis-backed persistence (load-on-startup + fire-and-forget write), matching the freeTierUsage pattern — previously reset on every redeploy
