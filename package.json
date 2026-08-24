@@ -1,7 +1,7 @@
 {
   "name": "data-compliance-mcp",
   "mcpName": "io.github.OjasKord/data-compliance-mcp",
-  "version": "1.0.35",
+  "version": "1.0.36",
   "description": "Data safety classifier for AI agents. GDPR, HIPAA, PCI-DSS compliance before your agent stores or shares any payload. SAFE/ESCALATE verdict in one call.",
   "main": "src/server.js",
   "scripts": {
@@ -36,5 +36,10 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@coinbase/x402": "^2.1.0",
+    "@x402/core": "^2.17.0",
+    "@x402/evm": "^2.17.0",
+    "@x402/extensions": "^2.17.0"
+  }
 }
