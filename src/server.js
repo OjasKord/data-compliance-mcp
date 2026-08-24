@@ -3,7 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const VERSION = '1.0.34';
+const VERSION = '1.0.35';
 const FIRST_DEPLOYED = '2026-04-21T09:53:12Z';
 const LIFETIME_CALLS_REDIS_KEY = 'dcc:lifetime_calls';
 const UPTIME_HEARTBEAT_KEY = 'dcc:uptime:heartbeat_count';
@@ -437,7 +437,7 @@ async function callClaude(prompt) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
+      max_tokens: 600,
       messages: [{ role: 'user', content: prompt }]
     });
     const req = https.request({
