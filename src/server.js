@@ -9,7 +9,7 @@ const fs = require('fs');
 // Polyfilling here is a no-op wherever the global already exists.
 if (!globalThis.crypto) globalThis.crypto = crypto.webcrypto;
 
-const VERSION = '1.0.37';
+const VERSION = require('../package.json').version; // single source of truth -- see L121 fix, 2026-09-07
 const FIRST_DEPLOYED = '2026-04-21T09:53:12Z';
 const LIFETIME_CALLS_REDIS_KEY = 'dcc:lifetime_calls';
 const UPTIME_HEARTBEAT_KEY = 'dcc:uptime:heartbeat_count';
@@ -1404,7 +1404,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.url === '/stats' && req.method === 'GET') {
-    if (!STATS_KEY || req.headers['x-stats-key'] !== STATS_KEY) { res.writeHead(401, cors); res.end(JSON.stringify({ error: 'Unauthorized' })); return; }
+    if (!STATS_KEY || req.headers['x-stats-key'] !== STATS_KEY) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Unauthorized' })); return; }
     const totalFreeCalls = Array.from(freeTierUsage.values()).reduce((a, b) => a + b, 0);
     const freeUniqueIPs = new Set(Array.from(freeTierUsage.keys()).map(k => k.split(':')[0])).size;
     const monthPrefix = new Date().toISOString().slice(0, 7);
@@ -1415,7 +1415,7 @@ const server = http.createServer(async (req, res) => {
         breakdown[ip.slice(0, 10) + '...'] = count;
       }
     }
-    res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ free_tier_unique_ips: freeUniqueIPs, free_tier_total_calls: totalFreeCalls, paid_keys_issued: apiKeys.size, tool_usage: toolUsageCounts, recent_calls: usageLog.slice(-20).reverse(), trial_extensions_granted: trialExtensions.size, free_tier_breakdown: breakdown }));
     return;
   }
@@ -1448,7 +1448,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.url === '/session-log' && req.method === 'GET') {
-    if (!STATS_KEY || req.headers['x-stats-key'] !== STATS_KEY) { res.writeHead(401, cors); res.end(JSON.stringify({ error: 'Unauthorized' })); return; }
+    if (!STATS_KEY || req.headers['x-stats-key'] !== STATS_KEY) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Unauthorized' })); return; }
     (async () => {
       const keys = await redisKeys(`${REDIS_PREFIX}:session:*`);
       const sessions = [];
@@ -1462,7 +1462,7 @@ const server = http.createServer(async (req, res) => {
         sessions.push({ ip: ipPart.slice(0, 8), date, calls, first_call: calls[0]?.timestamp || '', last_call: calls[calls.length - 1]?.timestamp || '' });
       }
       sessions.sort((a, b) => new Date(b.first_call) - new Date(a.first_call));
-      res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(sessions));
     })();
     return;
