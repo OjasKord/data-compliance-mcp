@@ -9,7 +9,7 @@ const fs = require('fs');
 // Polyfilling here is a no-op wherever the global already exists.
 if (!globalThis.crypto) globalThis.crypto = crypto.webcrypto;
 
-const VERSION = '1.0.36';
+const VERSION = '1.0.37';
 const FIRST_DEPLOYED = '2026-04-21T09:53:12Z';
 const LIFETIME_CALLS_REDIS_KEY = 'dcc:lifetime_calls';
 const UPTIME_HEARTBEAT_KEY = 'dcc:uptime:heartbeat_count';
@@ -23,7 +23,7 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const ABUSEIPDB_API_KEY = process.env.ABUSEIPDB_API_KEY || '';
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const OWNER_KEY = process.env.OWNER_KEY || '';
-const STATS_KEY = process.env.STATS_KEY || 'ojas2026';
+const STATS_KEY = process.env.STATS_KEY || '';
 const PORT = process.env.PORT || 3000;
 
 const freeTierUsage = new Map();
@@ -1404,7 +1404,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.url === '/stats' && req.method === 'GET') {
-    if (req.headers['x-stats-key'] !== STATS_KEY) { res.writeHead(401, cors); res.end(JSON.stringify({ error: 'Unauthorized' })); return; }
+    if (!STATS_KEY || req.headers['x-stats-key'] !== STATS_KEY) { res.writeHead(401, cors); res.end(JSON.stringify({ error: 'Unauthorized' })); return; }
     const totalFreeCalls = Array.from(freeTierUsage.values()).reduce((a, b) => a + b, 0);
     const freeUniqueIPs = new Set(Array.from(freeTierUsage.keys()).map(k => k.split(':')[0])).size;
     const monthPrefix = new Date().toISOString().slice(0, 7);
@@ -1448,7 +1448,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.url === '/session-log' && req.method === 'GET') {
-    if (req.headers['x-stats-key'] !== STATS_KEY) { res.writeHead(401, cors); res.end(JSON.stringify({ error: 'Unauthorized' })); return; }
+    if (!STATS_KEY || req.headers['x-stats-key'] !== STATS_KEY) { res.writeHead(401, cors); res.end(JSON.stringify({ error: 'Unauthorized' })); return; }
     (async () => {
       const keys = await redisKeys(`${REDIS_PREFIX}:session:*`);
       const sessions = [];
@@ -1525,7 +1525,7 @@ const server = http.createServer(async (req, res) => {
   // address, 24h after a trial extension was granted, unless that email has
   // since picked up a paid key on this server.
   if (req.url === '/process-trial-followups' && req.method === 'POST') {
-    if (req.headers['x-stats-key'] !== STATS_KEY) { res.writeHead(401, cors); res.end(JSON.stringify({ error: 'Unauthorized' })); return; }
+    if (!STATS_KEY || req.headers['x-stats-key'] !== STATS_KEY) { res.writeHead(401, cors); res.end(JSON.stringify({ error: 'Unauthorized' })); return; }
     (async () => {
       const keys = await redisKeys(REDIS_PREFIX + ':followup:*');
       const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
@@ -1568,7 +1568,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.url === '/daily-report' && req.method === 'POST') {
-    if (req.headers['x-stats-key'] !== STATS_KEY) {
+    if (!STATS_KEY || req.headers['x-stats-key'] !== STATS_KEY) {
       res.writeHead(401, cors); res.end(JSON.stringify({ error: 'Unauthorized' })); return;
     }
     (async () => {
